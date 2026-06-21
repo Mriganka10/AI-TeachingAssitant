@@ -26,12 +26,15 @@ function updateDate() {
 function showWorkspace(user) {
   const displayName = user.email.split("@")[0].replace(/[._-]+/g, " ");
   const titleName = displayName.replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const isGenericProfessor = titleName.toLowerCase() === "professor";
   $("#login").classList.add("hidden");
   $("#workspace").classList.remove("hidden");
-  $("#user-name").textContent = titleName;
+  $("#user-name").textContent = isGenericProfessor ? "Professor" : `Prof. ${titleName}`;
   $("#user-email").textContent = user.email;
   $("#user-avatar").textContent = titleName.charAt(0) || "P";
-  $("#welcome").textContent = `Good morning, ${titleName}.`;
+  $("#welcome").textContent = isGenericProfessor
+    ? "Good morning, Professor."
+    : `Good morning, Professor ${titleName}.`;
   updateDate();
   loadDashboard();
 }
@@ -164,19 +167,21 @@ async function loadJobs() {
   const completed = jobs.filter((job) => job.status === "completed").length;
   $("#stat-runs").textContent = jobs.length;
   $("#stat-completed").textContent = completed
-    ? `${completed} completed successfully`
-    : "No completed runs yet";
+    ? `${completed} faculty outputs completed`
+    : "No completed work yet";
   $("#recent-activity").innerHTML = jobs.length
     ? jobs.slice(0, 3).map((job) => {
         const teaching = job.agent_type === "teaching";
-        const title = teaching ? "Teaching package" : "Research synthesis";
+        const typeLabel = teaching ? "Lecture package" : "Research synthesis";
+        const title = escapeHtml(job.title || typeLabel);
+        const context = escapeHtml(job.course || typeLabel);
         return `<div class="activity-row">
           <span class="activity-agent ${teaching ? "teaching" : "research"}">${teaching ? "✦" : "⌁"}</span>
-          <div><strong>${title}</strong><small>${formatJobDate(job.started_at)} · ${escapeHtml(job.model || "Processing")}</small></div>
+          <div><strong>${title}</strong><small>${context} · ${formatJobDate(job.started_at)}</small></div>
           <span class="activity-status">${escapeHtml(job.status)}</span>
         </div>`;
       }).join("")
-    : `<div class="activity-empty"><span>◇</span><div><strong>No agent runs yet</strong><p>Your generated lectures and research syntheses will appear here.</p></div></div>`;
+    : `<div class="activity-empty"><span>◇</span><div><strong>No faculty work generated yet</strong><p>Your lecture packages and research syntheses will appear here.</p></div></div>`;
   return jobs;
 }
 
@@ -191,7 +196,7 @@ function updateReadiness(documents, jobs) {
     $("#readiness-documents").innerHTML = "<span>✓</span> Knowledge sources uploaded";
   }
   if (score === 100) {
-    $("#readiness-copy").textContent = "Your workspace is fully grounded and ready for regular academic work.";
+    $("#readiness-copy").textContent = "Your faculty workspace is grounded and ready for teaching and research work.";
   }
 }
 

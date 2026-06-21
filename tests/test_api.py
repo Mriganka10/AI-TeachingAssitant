@@ -43,4 +43,7 @@ def test_upload_and_both_agents() -> None:
         )
         assert research.status_code == 200
         assert research.json()["result"]["research_gaps"]
+        jobs = client.get("/api/jobs")
+        assert jobs.status_code == 200
+        assert jobs.json()[0]["title"] == "Responsible AI adoption"
         assert Path("data").exists()

@@ -298,6 +298,12 @@ def list_jobs(user: CurrentUser = Depends(current_user), db: Session = Depends(g
             "agent_type": job.agent_type,
             "status": job.status,
             "model": job.model,
+            "title": (
+                job.request_payload.get("topic")
+                or job.request_payload.get("research_topic")
+                or "Untitled faculty task"
+            ),
+            "course": job.request_payload.get("course") or job.request_payload.get("discipline"),
             "started_at": job.started_at,
         }
         for job in jobs
