@@ -33,7 +33,7 @@ function showWorkspace(user) {
   $("#user-avatar").textContent = titleName.charAt(0) || "P";
   $("#welcome").textContent = `Good morning, ${titleName}.`;
   updateDate();
-  loadDocuments();
+  loadDashboard();
 }
 
 async function boot() {
@@ -128,18 +128,76 @@ $('.nav-item[data-view="home"]').onclick = () => {
   $(".sidebar").classList.remove("open");
 };
 
-$('.nav-item[data-scroll-target="library"]').onclick = () => {
-  $("#library").scrollIntoView({ behavior: "smooth", block: "center" });
-  $(".sidebar").classList.remove("open");
-};
+$$('[data-scroll-target="library"]').forEach((button) => {
+  button.onclick = () => {
+    $("#library").scrollIntoView({ behavior: "smooth", block: "center" });
+    $(".sidebar").classList.remove("open");
+  };
+});
 
 $("#mobile-menu").onclick = () => $(".sidebar").classList.toggle("open");
 
 async function loadDocuments() {
   const documents = await api("/api/documents");
+  $("#stat-documents").textContent = documents.length;
   $("#documents").innerHTML = documents.length
-    ? documents.map((doc) => `<span class="document-chip">${doc.collection.replaceAll("_", " ")} · ${doc.filename}</span>`).join("")
+    ? documents.map((doc) => `<span class="document-chip">${escapeHtml(doc.collection.replaceAll("_", " "))} · ${escapeHtml(doc.filename)}</span>`).join("")
     : '<span class="empty-library">No documents uploaded yet.</span>';
+  return documents;
+}
+
+function escapeHtml(value) {
+  const node = document.createElement("div");
+  node.textContent = String(value);
+  return node.innerHTML;
+}
+
+function formatJobDate(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? ""
+    : date.toLocaleDateString("en", { day: "numeric", month: "short" });
+}
+
+async function loadJobs() {
+  const jobs = await api("/api/jobs");
+  const completed = jobs.filter((job) => job.status === "completed").length;
+  $("#stat-runs").textContent = jobs.length;
+  $("#stat-completed").textContent = completed
+    ? `${completed} completed successfully`
+    : "No completed runs yet";
+  $("#recent-activity").innerHTML = jobs.length
+    ? jobs.slice(0, 3).map((job) => {
+        const teaching = job.agent_type === "teaching";
+        const title = teaching ? "Teaching package" : "Research synthesis";
+        return `<div class="activity-row">
+          <span class="activity-agent ${teaching ? "teaching" : "research"}">${teaching ? "✦" : "⌁"}</span>
+          <div><strong>${title}</strong><small>${formatJobDate(job.started_at)} · ${escapeHtml(job.model || "Processing")}</small></div>
+          <span class="activity-status">${escapeHtml(job.status)}</span>
+        </div>`;
+      }).join("")
+    : `<div class="activity-empty"><span>◇</span><div><strong>No agent runs yet</strong><p>Your generated lectures and research syntheses will appear here.</p></div></div>`;
+  return jobs;
+}
+
+function updateReadiness(documents, jobs) {
+  let score = 25;
+  if (documents.length) score += 40;
+  if (jobs.length) score += 35;
+  $("#readiness-score").textContent = `${score}%`;
+  $("#readiness-progress").style.width = `${score}%`;
+  if (documents.length) {
+    $("#readiness-documents").classList.add("complete");
+    $("#readiness-documents").innerHTML = "<span>✓</span> Knowledge sources uploaded";
+  }
+  if (score === 100) {
+    $("#readiness-copy").textContent = "Your workspace is fully grounded and ready for regular academic work.";
+  }
+}
+
+async function loadDashboard() {
+  const [documents, jobs] = await Promise.all([loadDocuments(), loadJobs()]);
+  updateReadiness(documents, jobs);
 }
 
 $("#file").onchange = () => {
@@ -160,7 +218,7 @@ $("#upload-form").onsubmit = async (event) => {
     if (!response.ok) throw new Error((await response.json()).detail);
     event.target.reset();
     $(".file-button span").textContent = "Choose document";
-    await loadDocuments();
+    await loadDashboard();
   } catch (error) {
     alert(error.message);
   } finally {
@@ -181,6 +239,7 @@ async function run(url, payload) {
     $("#downloads").innerHTML = data.artifacts
       .map((artifact) => `<a class="download" href="/api/artifacts/${artifact.id}">↓ Download ${artifact.type.toUpperCase()}</a>`)
       .join("");
+    await loadDashboard();
   } catch (error) {
     $("#result").textContent = error.message;
   } finally {

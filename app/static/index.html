@@ -109,12 +109,41 @@
 
       <main class="dashboard">
         <section class="welcome-block">
-          <div>
-            <span class="overline">YOUR ACADEMIC COMMAND CENTRE</span>
+          <div class="welcome-content">
+            <span class="overline overline-light">YOUR ACADEMIC COMMAND CENTRE</span>
             <h2 id="welcome">Good morning, Professor.</h2>
-            <p>Choose a specialist agent and turn hours of academic preparation into focused review.</p>
+            <p>Move from first idea to classroom-ready material and defensible research—without losing your academic judgement.</p>
+            <div class="hero-actions">
+              <button class="hero-primary" data-agent-target="teaching"><span>✦</span> Prepare a lecture</button>
+              <button class="hero-secondary" data-agent-target="research"><span>⌁</span> Analyse research</button>
+            </div>
           </div>
-          <div class="date-card"><span id="today-day">22</span><div><strong id="today-month">JUN</strong><small id="today-year">2026</small></div></div>
+          <div class="hero-aside">
+            <div class="date-card"><span id="today-day">22</span><div><strong id="today-month">JUN</strong><small id="today-year">2026</small></div></div>
+            <div class="focus-note">
+              <span>FACULTY TIP</span>
+              <p>Upload your trusted notes and papers first for outputs grounded in your own material.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="workspace-stats" aria-label="Workspace overview">
+          <article class="stat-card">
+            <div class="stat-icon stat-blue">✦</div>
+            <div><span>Agent runs</span><strong id="stat-runs">0</strong><small id="stat-completed">No completed runs yet</small></div>
+          </article>
+          <article class="stat-card">
+            <div class="stat-icon stat-cyan">▤</div>
+            <div><span>Knowledge sources</span><strong id="stat-documents">0</strong><small>Available to your agents</small></div>
+          </article>
+          <article class="stat-card">
+            <div class="stat-icon stat-purple">◈</div>
+            <div><span>Agents online</span><strong>2</strong><small>Teaching and research</small></div>
+          </article>
+          <article class="stat-card">
+            <div class="stat-icon stat-green">✓</div>
+            <div><span>Workspace status</span><strong class="status-word">Ready</strong><small>Private and tenant-isolated</small></div>
+          </article>
         </section>
 
         <section class="section-heading">
@@ -151,6 +180,36 @@
             <button class="agent-launch" data-agent-target="research"><span>Start a research synthesis</span><span>→</span></button>
           </article>
         </div>
+
+        <section class="home-insights">
+          <article class="insight-card activity-card">
+            <div class="insight-heading">
+              <div><span class="overline">RECENT ACTIVITY</span><h3>Your latest agent work</h3></div>
+              <span class="live-label"><i></i> Live</span>
+            </div>
+            <div id="recent-activity" class="activity-list">
+              <div class="activity-empty">
+                <span>◇</span>
+                <div><strong>No agent runs yet</strong><p>Your generated lectures and research syntheses will appear here.</p></div>
+              </div>
+            </div>
+          </article>
+
+          <article class="insight-card readiness-card">
+            <div class="insight-heading">
+              <div><span class="overline">WORKSPACE READINESS</span><h3>Ground your agents</h3></div>
+              <span id="readiness-score" class="readiness-score">25%</span>
+            </div>
+            <div class="progress-track"><span id="readiness-progress"></span></div>
+            <p id="readiness-copy">Add trusted source material to improve the relevance of both agents.</p>
+            <ul class="readiness-list">
+              <li class="complete"><span>✓</span> Secure faculty account</li>
+              <li id="readiness-documents"><span>○</span> Upload knowledge sources</li>
+              <li><span>○</span> Complete your first agent run</li>
+            </ul>
+            <button class="readiness-action" data-scroll-target="library">Add source material <span>→</span></button>
+          </article>
+        </section>
 
         <section id="agent-workbench" class="workbench hidden">
           <div class="workbench-header">
