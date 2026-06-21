@@ -1,0 +1,304 @@
+import mimetypes
+import tempfile
+from datetime import UTC, datetime
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi.responses import FileResponse
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.agents.llm import llm
+from app.agents.prompts import RESEARCH_SYSTEM, TEACHING_SYSTEM
+from app.agents.retrieval import retrieve_context
+from app.artifacts.generator import create_artifacts
+from app.core.audit import audit
+from app.core.auth import CurrentUser, auth_service, current_user
+from app.core.config import settings
+from app.core.database import get_db
+from app.core.documents import extract_text
+from app.core.models import AgentJob, Artifact, SourceDocument
+from app.core.storage import checksum, storage
+from app.schemas import OTPRequest, OTPVerify, ResearchRequest, TeachingRequest
+
+router = APIRouter(prefix="/api")
+
+
+@router.post("/auth/request-otp")
+def request_otp(payload: OTPRequest, request: Request, db: Session = Depends(get_db)):
+    email, dev_otp = auth_service.request_otp(db, payload.email)
+    audit(
+        db,
+        tenant_id=email.split("@")[-1],
+        actor_email=email,
+        event_type="auth.otp_requested",
+        status="success",
+        request=request,
+    )
+    response = {"message": "OTP sent.", "email": email}
+    if dev_otp:
+        response["dev_otp"] = dev_otp
+    return response
+
+
+@router.post("/auth/verify")
+def verify_otp(payload: OTPVerify, response: Response, request: Request, db: Session = Depends(get_db)):
+    user, token = auth_service.verify_otp(db, payload.email, payload.otp)
+    response.set_cookie(
+        settings.cookie_name,
+        token,
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="lax",
+        max_age=settings.session_ttl_minutes * 60,
+    )
+    audit(
+        db,
+        tenant_id=user.tenant_id,
+        actor_email=user.email,
+        event_type="auth.login",
+        status="success",
+        request=request,
+    )
+    return {"email": user.email, "role": user.role}
+
+
+@router.post("/auth/logout")
+def logout(request: Request, response: Response, db: Session = Depends(get_db)):
+    auth_service.logout(db, request.cookies.get(settings.cookie_name))
+    response.delete_cookie(settings.cookie_name)
+    return {"message": "Signed out."}
+
+
+@router.get("/auth/me")
+def me(user: CurrentUser = Depends(current_user)):
+    return {"email": user.email, "role": user.role, "tenant_id": user.tenant_id}
+
+
+@router.post("/documents")
+async def upload_document(
+    request: Request,
+    collection: str = Form(...),
+    file: UploadFile = File(...),
+    user: CurrentUser = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    size_limit = settings.max_upload_mb * 1024 * 1024
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in {".pdf", ".docx", ".txt", ".md", ".csv"}:
+        raise HTTPException(status_code=415, detail="Unsupported document format.")
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp:
+        content = await file.read(size_limit + 1)
+        if len(content) > size_limit:
+            raise HTTPException(status_code=413, detail="File exceeds upload limit.")
+        temp.write(content)
+        temp_path = Path(temp.name)
+    try:
+        text = extract_text(temp_path)
+        document = SourceDocument(
+            tenant_id=user.tenant_id,
+            uploaded_by=user.email,
+            collection=collection,
+            filename=Path(file.filename or "document").name,
+            content_type=file.content_type,
+            size_bytes=len(content),
+            checksum_sha256=checksum(temp_path),
+            storage_uri="pending",
+            extracted_text=text,
+        )
+        db.add(document)
+        db.flush()
+        document.storage_uri = storage.save(
+            temp_path, tenant_id=user.tenant_id, category="rag", object_id=document.id
+        )
+        db.commit()
+        audit(
+            db,
+            tenant_id=user.tenant_id,
+            actor_email=user.email,
+            event_type="document.uploaded",
+            status="success",
+            request=request,
+            entity_type="document",
+            entity_id=document.id,
+            details={"filename": document.filename, "collection": collection},
+        )
+        return {"id": document.id, "filename": document.filename, "collection": collection}
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+
+@router.get("/documents")
+def list_documents(
+    user: CurrentUser = Depends(current_user), db: Session = Depends(get_db)
+):
+    docs = db.scalars(
+        select(SourceDocument)
+        .where(SourceDocument.tenant_id == user.tenant_id)
+        .order_by(SourceDocument.created_at.desc())
+    )
+    return [
+        {
+            "id": doc.id,
+            "filename": doc.filename,
+            "collection": doc.collection,
+            "size_bytes": doc.size_bytes,
+            "status": doc.status,
+        }
+        for doc in docs
+    ]
+
+
+@router.post("/agents/teaching")
+def teaching_agent(
+    payload: TeachingRequest,
+    request: Request,
+    user: CurrentUser = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    return _run_agent("teaching", payload.model_dump(), TEACHING_SYSTEM, request, user, db)
+
+
+@router.post("/agents/research")
+def research_agent(
+    payload: ResearchRequest,
+    request: Request,
+    user: CurrentUser = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    return _run_agent("research", payload.model_dump(), RESEARCH_SYSTEM, request, user, db)
+
+
+def _run_agent(
+    agent_type: str,
+    payload: dict,
+    system_prompt: str,
+    request: Request,
+    user: CurrentUser,
+    db: Session,
+):
+    job = AgentJob(
+        tenant_id=user.tenant_id,
+        created_by=user.email,
+        agent_type=agent_type,
+        request_payload=payload,
+    )
+    db.add(job)
+    db.commit()
+    try:
+        query = payload.get("topic") or payload.get("research_topic", "")
+        contexts = retrieve_context(
+            db,
+            tenant_id=user.tenant_id,
+            query=query,
+            collections=payload.get("collections", []),
+        )
+        model_payload = {**payload, "uploaded_context": contexts}
+        result, model = llm.generate(
+            system=system_prompt,
+            payload=model_payload,
+            use_web_search=payload.get("use_web_search", False),
+        )
+        paths = create_artifacts(
+            result,
+            agent_type=agent_type,
+            output_dir=settings.data_dir / "generated" / job.id,
+        )
+        artifacts = []
+        for path in paths:
+            artifact = Artifact(
+                tenant_id=user.tenant_id,
+                job_id=job.id,
+                artifact_type=path.suffix.lstrip("."),
+                filename=path.name,
+                content_type=mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+                storage_uri="pending",
+                size_bytes=path.stat().st_size,
+                checksum_sha256=checksum(path),
+            )
+            db.add(artifact)
+            db.flush()
+            artifact.storage_uri = storage.save(
+                path, tenant_id=user.tenant_id, category="artifacts", object_id=artifact.id
+            )
+            artifacts.append(artifact)
+        job.status = "completed"
+        job.result_payload = result
+        job.model = model
+        job.completed_at = datetime.now(UTC)
+        db.commit()
+        audit(
+            db,
+            tenant_id=user.tenant_id,
+            actor_email=user.email,
+            event_type=f"agent.{agent_type}.completed",
+            status="success",
+            request=request,
+            entity_type="job",
+            entity_id=job.id,
+            details={"model": model, "artifact_count": len(artifacts)},
+        )
+        return {
+            "job_id": job.id,
+            "status": job.status,
+            "result": result,
+            "artifacts": [
+                {"id": item.id, "filename": item.filename, "type": item.artifact_type}
+                for item in artifacts
+            ],
+        }
+    except Exception as exc:
+        job.status = "failed"
+        job.error_message = str(exc)[:2000]
+        job.completed_at = datetime.now(UTC)
+        db.commit()
+        audit(
+            db,
+            tenant_id=user.tenant_id,
+            actor_email=user.email,
+            event_type=f"agent.{agent_type}.failed",
+            status="failed",
+            request=request,
+            entity_type="job",
+            entity_id=job.id,
+            details={"error": str(exc)[:500]},
+        )
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.get("/artifacts/{artifact_id}")
+def download_artifact(
+    artifact_id: str,
+    user: CurrentUser = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    artifact = db.scalar(
+        select(Artifact).where(
+            Artifact.id == artifact_id,
+            Artifact.tenant_id == user.tenant_id,
+        )
+    )
+    if not artifact:
+        raise HTTPException(status_code=404, detail="Artifact not found.")
+    path = storage.materialize(artifact.storage_uri)
+    return FileResponse(path, filename=artifact.filename, media_type=artifact.content_type)
+
+
+@router.get("/jobs")
+def list_jobs(user: CurrentUser = Depends(current_user), db: Session = Depends(get_db)):
+    jobs = db.scalars(
+        select(AgentJob)
+        .where(AgentJob.tenant_id == user.tenant_id)
+        .order_by(AgentJob.started_at.desc())
+        .limit(50)
+    )
+    return [
+        {
+            "id": job.id,
+            "agent_type": job.agent_type,
+            "status": job.status,
+            "model": job.model,
+            "started_at": job.started_at,
+        }
+        for job in jobs
+    ]
