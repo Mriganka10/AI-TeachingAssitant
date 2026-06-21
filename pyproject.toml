@@ -1,0 +1,42 @@
+[project]
+name = "professor-ai-workspace"
+version = "0.1.0"
+description = "Production-oriented AI teaching and research assistants for professors"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.116.0",
+  "uvicorn[standard]>=0.35.0",
+  "python-multipart>=0.0.20",
+  "pydantic-settings>=2.10.0",
+  "sqlalchemy>=2.0.40",
+  "openai>=1.86.0",
+  "boto3>=1.38.0",
+  "psycopg[binary]>=3.2.0",
+  "pypdf>=5.6.0",
+  "python-docx>=1.2.0",
+  "python-pptx>=1.0.2",
+  "reportlab>=4.4.0",
+  "scikit-learn>=1.7.0",
+  "PyMuPDF>=1.26.0",
+  "pytesseract>=0.3.13",
+  "alembic>=1.16.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.4.0",
+  "httpx>=0.28.0",
+  "ruff>=0.12.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.setuptools.packages.find]
+include = ["app*"]

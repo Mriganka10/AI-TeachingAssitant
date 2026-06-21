@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Professor AI Workspace</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <section id="login" class="auth-shell">
+    <div class="auth-brand">
+      <div class="brand-mark" aria-hidden="true">
+        <span></span><span></span><span></span>
+      </div>
+      <div class="auth-brand-copy">
+        <span class="overline overline-light">FACULTY INTELLIGENCE PLATFORM</span>
+        <h1>More time for<br><em>ideas that matter.</em></h1>
+        <p>AI colleagues for teaching, research, and academic work—grounded in your own knowledge.</p>
+      </div>
+      <div class="auth-proof">
+        <div class="proof-item"><strong>2</strong><span>Specialist<br>AI agents</span></div>
+        <div class="proof-item"><strong>1</strong><span>Secure faculty<br>workspace</span></div>
+        <div class="proof-item"><strong>24/7</strong><span>Academic<br>assistance</span></div>
+      </div>
+      <p class="auth-footnote">Designed for universities, business schools, and research institutions.</p>
+    </div>
+
+    <div class="auth-panel">
+      <div class="auth-card">
+        <div class="mobile-brand">
+          <div class="brand-mark small"><span></span><span></span><span></span></div>
+          <strong>Professor AI</strong>
+        </div>
+        <span class="overline">SECURE FACULTY ACCESS</span>
+        <h2>Welcome back</h2>
+        <p class="auth-intro">Sign in with your institutional email. We’ll send a secure one-time code—no password required.</p>
+
+        <form id="otp-request" class="auth-form">
+          <label for="email">Institutional email</label>
+          <div class="input-wrap">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 6h16v12H4zM4 7l8 6 8-6"/></svg>
+            <input id="email" type="email" autocomplete="email" placeholder="professor@university.edu" required>
+          </div>
+          <button class="primary-button" type="submit">
+            <span>Continue with email</span><span aria-hidden="true">→</span>
+          </button>
+        </form>
+
+        <form id="otp-verify" class="auth-form hidden">
+          <div class="otp-heading">
+            <div><label for="otp">Enter verification code</label><small id="otp-destination"></small></div>
+            <button id="change-email" class="text-button" type="button">Change email</button>
+          </div>
+          <input id="otp" class="otp-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••" required>
+          <button class="primary-button" type="submit">
+            <span>Enter workspace</span><span aria-hidden="true">→</span>
+          </button>
+        </form>
+
+        <p id="auth-message" class="auth-message" role="status"></p>
+        <div class="trust-note">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"/></svg>
+          <span>Your workspace is private, encrypted, and isolated from other institutions.</span>
+        </div>
+      </div>
+      <p class="legal">By continuing, you agree to the platform terms and privacy policy.</p>
+    </div>
+  </section>
+
+  <section id="workspace" class="app-shell hidden">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-mark small"><span></span><span></span><span></span></div>
+        <div><strong>Professor AI</strong><small>Faculty Workspace</small></div>
+      </div>
+      <nav aria-label="Workspace navigation">
+        <button class="nav-item active" data-view="home">
+          <span class="nav-icon">⌂</span><span>Home</span>
+        </button>
+        <button class="nav-item" data-agent-target="teaching">
+          <span class="nav-icon">✦</span><span>Teaching Assistant</span>
+        </button>
+        <button class="nav-item" data-agent-target="research">
+          <span class="nav-icon">⌁</span><span>Research Assistant</span>
+        </button>
+        <button class="nav-item" data-scroll-target="library">
+          <span class="nav-icon">▤</span><span>Knowledge Library</span>
+        </button>
+      </nav>
+      <div class="sidebar-spacer"></div>
+      <div class="system-card">
+        <span class="system-dot"></span>
+        <div><strong>Systems operational</strong><small>OpenAI + RAG connected</small></div>
+      </div>
+      <button id="logout" class="nav-item logout-button">
+        <span class="nav-icon">↗</span><span>Sign out</span>
+      </button>
+    </aside>
+
+    <div class="app-content">
+      <header class="topbar">
+        <button id="mobile-menu" class="icon-button" aria-label="Open menu">☰</button>
+        <div class="breadcrumb"><span>Workspace</span><b>/</b><strong>Home</strong></div>
+        <div class="user-menu">
+          <div class="user-avatar" id="user-avatar">P</div>
+          <div><strong id="user-name">Professor</strong><small id="user-email">Faculty account</small></div>
+        </div>
+      </header>
+
+      <main class="dashboard">
+        <section class="welcome-block">
+          <div class="welcome-content">
+            <span class="overline overline-light">YOUR ACADEMIC COMMAND CENTRE</span>
+            <h2 id="welcome">Good morning, Professor.</h2>
+            <p>Prepare lectures, strengthen course material, and move research forward—with your academic judgement always in control.</p>
+            <div class="hero-actions">
+              <button class="hero-primary" data-agent-target="teaching"><span>✦</span> Prepare a lecture</button>
+              <button class="hero-secondary" data-agent-target="research"><span>⌁</span> Analyse research</button>
+            </div>
+          </div>
+          <div class="hero-aside">
+            <div class="date-card"><span id="today-day">22</span><div><strong id="today-month">JUN</strong><small id="today-year">2026</small></div></div>
+            <div class="focus-note">
+              <span>FACULTY TIP</span>
+              <p>Upload your trusted notes and papers first for outputs grounded in your own material.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="workspace-stats" aria-label="Workspace overview">
+          <article class="stat-card">
+            <div class="stat-icon stat-blue">✦</div>
+            <div><span>Faculty tasks</span><strong id="stat-runs">0</strong><small id="stat-completed">No completed work yet</small></div>
+          </article>
+          <article class="stat-card">
+            <div class="stat-icon stat-cyan">▤</div>
+            <div><span>Academic sources</span><strong id="stat-documents">0</strong><small>Papers, notes, books and cases</small></div>
+          </article>
+          <article class="stat-card">
+            <div class="stat-icon stat-purple">◈</div>
+            <div><span>Faculty assistants</span><strong>2</strong><small>Teaching and research specialists</small></div>
+          </article>
+          <article class="stat-card">
+            <div class="stat-icon stat-green">✓</div>
+            <div><span>Faculty workspace</span><strong class="status-word">Ready</strong><small>Private to your institution</small></div>
+          </article>
+        </section>
+
+        <section class="section-heading">
+          <div><span class="overline">SPECIALIST AGENTS</span><h3>What would you like to work on?</h3></div>
+          <span class="agent-count">2 agents available</span>
+        </section>
+
+        <div class="agent-catalog">
+          <article class="agent-card teaching-card">
+            <div class="agent-card-top">
+              <div class="agent-symbol teaching-symbol">✦</div>
+              <span class="agent-state"><i></i> Ready</span>
+            </div>
+            <div class="agent-label">TEACHING & CURRICULUM</div>
+            <h4>AI Teaching Assistant</h4>
+            <p>Build a complete, evidence-aware teaching package from one topic and your own materials.</p>
+            <div class="capability-list">
+              <span>Lecture decks</span><span>Notes</span><span>MCQs</span><span>Assignments</span><span>Bloom mapping</span><span>Viva</span>
+            </div>
+            <button class="agent-launch" data-agent-target="teaching"><span>Start preparing a lecture</span><span>→</span></button>
+          </article>
+
+          <article class="agent-card research-card">
+            <div class="agent-card-top">
+              <div class="agent-symbol research-symbol">⌁</div>
+              <span class="agent-state"><i></i> Ready</span>
+            </div>
+            <div class="agent-label">RESEARCH & SYNTHESIS</div>
+            <h4>Research Paper Assistant</h4>
+            <p>Read across your paper library and surface themes, methods, gaps, and defensible next questions.</p>
+            <div class="capability-list">
+              <span>Literature review</span><span>Research gaps</span><span>Methods</span><span>APA references</span><span>Future scope</span>
+            </div>
+            <button class="agent-launch" data-agent-target="research"><span>Start a research synthesis</span><span>→</span></button>
+          </article>
+        </div>
+
+        <section class="home-insights">
+          <article class="insight-card activity-card">
+            <div class="insight-heading">
+              <div><span class="overline">RECENT FACULTY WORK</span><h3>Lectures and research in progress</h3></div>
+              <span class="live-label"><i></i> Live</span>
+            </div>
+            <div id="recent-activity" class="activity-list">
+              <div class="activity-empty">
+                <span>◇</span>
+                <div><strong>No faculty work generated yet</strong><p>Your lecture packages and research syntheses will appear here.</p></div>
+              </div>
+            </div>
+          </article>
+
+          <article class="insight-card readiness-card">
+            <div class="insight-heading">
+              <div><span class="overline">FACULTY SETUP</span><h3>Prepare your academic workspace</h3></div>
+              <span id="readiness-score" class="readiness-score">25%</span>
+            </div>
+            <div class="progress-track"><span id="readiness-progress"></span></div>
+            <p id="readiness-copy">Add course notes, papers, books, and cases so both assistants reflect your academic context.</p>
+            <ul class="readiness-list">
+              <li class="complete"><span>✓</span> Secure faculty account</li>
+              <li id="readiness-documents"><span>○</span> Upload knowledge sources</li>
+              <li><span>○</span> Create your first faculty output</li>
+            </ul>
+            <button class="readiness-action" data-scroll-target="library">Add source material <span>→</span></button>
+          </article>
+        </section>
+
+        <section id="agent-workbench" class="workbench hidden">
+          <div class="workbench-header">
+            <div>
+              <span id="workbench-kicker" class="overline">TEACHING & CURRICULUM</span>
+              <h3 id="workbench-title">AI Teaching Assistant</h3>
+              <p id="workbench-description">Tell the agent what you’re teaching and it will assemble a review-ready package.</p>
+            </div>
+            <button id="close-workbench" class="icon-button" aria-label="Close agent">×</button>
+          </div>
+
+          <form id="teaching-form" class="agent-form">
+            <label class="full-field">What topic are you teaching?
+              <input id="teach-topic" required placeholder="e.g. Time value of money">
+            </label>
+            <label>Course or programme
+              <input id="teach-course" placeholder="e.g. MBA Finance">
+            </label>
+            <label>Session duration
+              <div class="input-suffix"><input id="teach-duration" type="number" value="60"><span>minutes</span></div>
+            </label>
+            <label class="check full-field"><input id="teach-web" type="checkbox" checked><span><strong>Use current web research</strong><small>Include recent industry news and credible public sources.</small></span></label>
+            <button class="primary-button submit-agent full-field">Generate teaching package <span>→</span></button>
+          </form>
+
+          <form id="research-form" class="agent-form hidden">
+            <label class="full-field">What are you researching?
+              <textarea id="research-topic" required placeholder="Describe your research topic, question, or problem statement"></textarea>
+            </label>
+            <label class="full-field">Discipline
+              <input id="discipline" placeholder="e.g. Management, Finance, Computer Science">
+            </label>
+            <label class="check full-field"><input id="research-web" type="checkbox" checked><span><strong>Use current web research</strong><small>Supplement uploaded papers with recent credible sources.</small></span></label>
+            <button class="primary-button submit-agent full-field">Generate research synthesis <span>→</span></button>
+          </form>
+        </section>
+
+        <section id="library" class="library-panel">
+          <div class="library-copy">
+            <div class="library-icon">▤</div>
+            <div><span class="overline">YOUR KNOWLEDGE BASE</span><h3>Knowledge library</h3><p>Ground both agents in papers, books, notes, and case studies you trust.</p></div>
+          </div>
+          <form id="upload-form" class="upload-form">
+            <select id="collection" aria-label="Document collection"><option value="research_papers">Research papers</option><option value="previous_notes">Previous notes</option><option value="books">Books</option><option value="case_studies">Case studies</option></select>
+            <label class="file-button"><input id="file" type="file" accept=".pdf,.docx,.txt,.md,.csv" required><span>Choose document</span></label>
+            <button class="secondary-button">Upload</button>
+          </form>
+          <div id="documents" class="document-list"><span class="empty-library">No documents uploaded yet.</span></div>
+        </section>
+
+        <section id="output" class="output-panel hidden">
+          <div class="output-heading"><div><span class="overline">AGENT OUTPUT</span><h3>Your material is ready</h3></div><div class="loader hidden" id="loader"></div></div>
+          <div id="downloads" class="downloads"></div>
+          <pre id="result"></pre>
+        </section>
+      </main>
+    </div>
+  </section>
+  <script src="/static/app.js"></script>
+</body>
+</html>
