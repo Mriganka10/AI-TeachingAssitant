@@ -10,8 +10,22 @@ class Base(DeclarativeBase):
     pass
 
 
-connect_args = {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
-engine = create_engine(settings.database_url, pool_pre_ping=True, connect_args=connect_args)
+if settings.database_url.startswith("sqlite"):
+    engine_options = {"connect_args": {"check_same_thread": False}}
+else:
+    engine_options = {
+        "pool_size": settings.database_pool_size,
+        "max_overflow": settings.database_max_overflow,
+        "pool_recycle": settings.database_pool_recycle_seconds,
+        "connect_args": {"connect_timeout": settings.database_connect_timeout_seconds},
+    }
+
+engine = create_engine(
+    settings.database_url,
+    pool_pre_ping=True,
+    future=True,
+    **engine_options,
+)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 

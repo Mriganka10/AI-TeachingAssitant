@@ -52,6 +52,15 @@ S3_KMS_KEY_ID=<optional-kms-key>
 AWS_REGION=ap-south-1
 MAX_UPLOAD_MB=50
 MAX_CONTEXT_CHARS=120000
+DATABASE_POOL_SIZE=5
+DATABASE_MAX_OVERFLOW=10
+DATABASE_POOL_RECYCLE_SECONDS=1800
+DATABASE_CONNECT_TIMEOUT_SECONDS=10
+OCR_ENABLED=true
+OCR_PROVIDER=textract
+OCR_MIN_TEXT_CHARS=80
+OCR_MAX_PAGES=100
+OCR_DPI=200
 ```
 
 ## S3 Layout
@@ -80,6 +89,7 @@ The EB EC2 role needs only:
 - `s3:PutObject`
 - optionally `s3:DeleteObject`
 - `kms:Encrypt`, `kms:Decrypt`, and `kms:GenerateDataKey` when using KMS
+- `textract:DetectDocumentText` when `OCR_PROVIDER=textract`
 
 Scope permissions to the application bucket and prefix.
 
@@ -106,6 +116,7 @@ The repository includes:
 - `Procfile`
 - `Dockerfile`
 - `.ebextensions/01_options.config`
+- Alembic migrations in `migrations/`
 
 Example EB CLI flow:
 
@@ -149,12 +160,13 @@ Then verify:
 5. both agent runs
 6. artifact download after instance replacement
 7. audit-event rows
-8. CloudWatch application logs
+8. scanned-PDF ingestion through Textract
+9. CloudWatch application logs
 
 ## Production Limitations
 
 - SQLite must not be used across multiple instances.
 - Local EC2 disk is temporary and must not be the source of record.
 - Synchronous agent calls can exceed comfortable web-request duration.
-- Startup schema creation is not a substitute for migrations.
+- Apply and review Alembic migrations before every production release.
 - Introduce a queue/worker design before heavy or multi-user usage.

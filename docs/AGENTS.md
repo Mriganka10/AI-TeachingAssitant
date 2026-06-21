@@ -19,7 +19,7 @@ Professor
           -> retrieve research papers
           -> optional web search
           -> structured research synthesis
-          -> DOCX, PDF, JSON
+          -> PPTX, DOCX, PDF, JSON
 ```
 
 ## AI Teaching Assistant
@@ -62,10 +62,10 @@ Required structured output:
 
 Generated artifacts:
 
-- JSON source representation
-- Word document
-- PDF document
-- PowerPoint deck
+- JSON source representation for audit and interoperability
+- styled Word teaching handbook with session plan, notes, assessment toolkit, and references
+- paginated PDF teaching handbook with matching academic structure
+- presentation deck with lecture flow, activities, knowledge checks, and sources
 
 Professor review should check factual accuracy, source suitability, workload, learning-level
 alignment, accessibility, and institutional assessment policy.
@@ -103,9 +103,10 @@ Required structured output:
 
 Generated artifacts:
 
-- JSON source representation
-- Word document
-- PDF document
+- JSON source representation for audit and interoperability
+- styled Word research report with evidence/inference separation
+- paginated PDF research report
+- presentation deck covering themes, gaps, questions, methodology, and future scope
 
 Professor review should verify every reference, distinguish source evidence from inference, and
 validate that a claimed research gap is defensible against the full literature.

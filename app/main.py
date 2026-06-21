@@ -14,7 +14,10 @@ from app.core.database import create_schema
 async def lifespan(_: FastAPI):
     if settings.is_production and settings.secret_key == "local-development-only-change-me":
         raise RuntimeError("Set SECRET_KEY before starting in production.")
-    create_schema()
+    if settings.is_production and not settings.is_postgresql:
+        raise RuntimeError("Production requires a PostgreSQL DATABASE_URL.")
+    if not settings.is_production:
+        create_schema()
     yield
 
 

@@ -43,6 +43,12 @@ def test_upload_and_both_agents() -> None:
         )
         assert research.status_code == 200
         assert research.json()["result"]["research_gaps"]
+        assert {a["type"] for a in research.json()["artifacts"]} == {
+            "json",
+            "docx",
+            "pdf",
+            "pptx",
+        }
         jobs = client.get("/api/jobs")
         assert jobs.status_code == 200
         assert jobs.json()[0]["title"] == "Responsible AI adoption"
