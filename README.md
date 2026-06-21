@@ -8,6 +8,24 @@ A deployable, multi-tenant baseline for two professor-facing agents:
    methodology comparison, research gaps, research questions, future scope, methodology
    suggestions, and APA-style references.
 
+## Documentation
+
+- [Project brief](docs/PROJECT_BRIEF.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Agent workflows](docs/AGENTS.md)
+- [Models and techniques](docs/MODELS_AND_AGENTS.md)
+- [RAG design](docs/RAG_DESIGN.md)
+- [API reference](docs/API.md)
+- [Local setup](docs/SETUP.md)
+- [Data model and audit](docs/DATA_MODEL_AND_AUDIT.md)
+- [Security and compliance](docs/SECURITY_AND_COMPLIANCE.md)
+- [AWS deployment](docs/AWS_DEPLOYMENT.md)
+- [AWS deployment walkthrough](docs/AWS_DEPLOYMENT_WALKTHROUGH.md)
+- [Operations runbook](docs/OPERATIONS_RUNBOOK.md)
+- [Testing and QA](docs/TESTING_AND_QA.md)
+- [Roadmap](docs/ROADMAP.md)
+- [Owner handoff guide](docs/OWNER_HANDOFF_GUIDE.md)
+
 ## Architecture
 
 ```text
