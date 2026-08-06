@@ -62,7 +62,10 @@ input:focus, select:focus, textarea:focus { border-color: #7191e4; box-shadow: 0
 .primary-button:hover { transform: translateY(-1px); box-shadow: 0 12px 28px rgba(37,87,214,.3); }
 .otp-heading { display: flex; justify-content: space-between; align-items: end; }
 .otp-heading div { display: grid; gap: 3px; }.otp-heading small { color: var(--muted); }
-.text-button { padding: 0; border: 0; color: var(--blue); background: transparent; font-size: 12px; font-weight: 700; }
+.text-button { padding: 0; border: 0; color: var(--blue); background: transparent; font-size: 12px; font-weight: 700; text-decoration: none; }
+.text-button:hover { text-decoration: underline; }
+.register-button { justify-self: center; margin-top: 4px; }
+.auth-help { margin: 2px 0 0; padding: 12px 13px; border: 1px solid #dbe6ff; border-radius: 10px; color: #5b6980; background: #f6f9ff; font-size: 12px; line-height: 1.55; }
 .otp-input { text-align: center; font-size: 25px; font-weight: 700; letter-spacing: .45em; }
 .auth-message { min-height: 20px; margin: 16px 0 5px; color: var(--blue); font-size: 13px; }
 .auth-message.error { color: #c64646; }

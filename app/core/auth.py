@@ -5,6 +5,7 @@ import smtplib
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from email.message import EmailMessage
+from typing import Annotated
 
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import Depends, HTTPException, Request
@@ -55,17 +56,16 @@ class AuthService:
     def request_otp(self, db: Session, email: str) -> OTPRequestResult:
         email = normalize_email(email)
         if self._ses_enabled and not settings.otp_dev_mode:
-            verification = self.ensure_email_verified_or_start(db, email)
-            if verification.status != "verified":
-                return OTPRequestResult(
-                    email=email,
-                    message=(
-                        "We sent an AWS SES verification link to this email. "
-                        "Please click that link, then return here and request your OTP."
+            status = self._ses_email_status(db, email)
+            if status.upper() != "SUCCESS":
+                raise HTTPException(
+                    status_code=403,
+                    detail=(
+                        "This email is not verified yet. Use New User Registration first, "
+                        "then request OTP after clicking the AWS verification link."
                     ),
-                    status="verification_required",
-                    delivery="verification-email",
                 )
+            self._ensure_user(db, email)
         code = f"{secrets.randbelow(1_000_000):06d}"
         db.add(
             OTPChallenge(
@@ -87,11 +87,20 @@ class AuthService:
 
     def register_email(self, db: Session, email: str) -> OTPRequestResult:
         email = normalize_email(email)
+        current = db.scalar(select(EmailVerification).where(EmailVerification.email == email))
+        if current and current.status.upper() in {"SUCCESS", "VERIFIED"}:
+            self._ensure_user(db, email)
+            return OTPRequestResult(
+                email=email,
+                message="Email is already verified. You can return to login and request an OTP.",
+                status="verified",
+                delivery="none",
+            )
         verification = self.ensure_email_verified_or_start(db, email, force_start=True)
         if verification.status == "verified":
             return OTPRequestResult(
                 email=email,
-                message="Email is verified. You can request your OTP now.",
+                message="Email is already verified. You can return to login and request an OTP.",
                 status="verified",
                 delivery="none",
             )
@@ -306,7 +315,7 @@ class AuthService:
 auth_service = AuthService()
 
 
-def current_user(request: Request, db: Session = Depends(get_db)) -> CurrentUser:
+def current_user(request: Request, db: Annotated[Session, Depends(get_db)]) -> CurrentUser:
     if not settings.auth_enabled:
         return CurrentUser("local", "professor@local.dev", "local-dev", "professor")
     token = request.cookies.get(settings.cookie_name)

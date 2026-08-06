@@ -35,3 +35,13 @@ def health():
 @app.get("/")
 def index():
     return FileResponse(static_dir / "index.html")
+
+
+@app.get("/login")
+def login():
+    return FileResponse(static_dir / "index.html")
+
+
+@app.get("/register")
+def register():
+    return FileResponse(static_dir / "index.html")

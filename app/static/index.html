@@ -31,9 +31,9 @@
           <div class="brand-mark small"><span></span><span></span><span></span></div>
           <strong>Professor AI</strong>
         </div>
-        <span class="overline">SECURE FACULTY ACCESS</span>
-        <h2>Welcome back</h2>
-        <p class="auth-intro">Sign in with your institutional email. We’ll send a secure one-time code—no password required.</p>
+        <span id="auth-eyebrow" class="overline">SECURE FACULTY ACCESS</span>
+        <h2 id="auth-title">Welcome back</h2>
+        <p id="auth-intro" class="auth-intro">Sign in with your institutional email. We’ll send a secure one-time code—no password required.</p>
 
         <form id="otp-request" class="auth-form">
           <label for="email">Institutional email</label>
@@ -44,9 +44,24 @@
           <button class="primary-button" type="submit">
             <span>Continue with email</span><span aria-hidden="true">→</span>
           </button>
-          <button id="register-email" class="text-button register-button" type="button">
+          <a id="open-register" class="text-button register-button" href="/register">
             New user? Verify your email first
+          </a>
+        </form>
+
+        <form id="email-register" class="auth-form hidden">
+          <label for="register-email-input">Email address</label>
+          <div class="input-wrap">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 6h16v12H4zM4 7l8 6 8-6"/></svg>
+            <input id="register-email-input" type="email" autocomplete="email" placeholder="professor@university.edu" required>
+          </div>
+          <button class="primary-button" type="submit">
+            <span>Send verification link</span><span aria-hidden="true">→</span>
           </button>
+          <p class="auth-help">AWS SES will send a one-time verification email. Click that email link, then return to login and request your OTP.</p>
+          <a id="back-to-login" class="text-button register-button" href="/login">
+            Already verified? Back to login
+          </a>
         </form>
 
         <form id="otp-verify" class="auth-form hidden">

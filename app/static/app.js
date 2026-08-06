@@ -16,6 +16,32 @@ function setAuthMessage(message = "", isError = false) {
   $("#auth-message").classList.toggle("error", isError);
 }
 
+function showLoginView(message = "") {
+  history.replaceState(null, "", "/login");
+  $("#auth-eyebrow").textContent = "SECURE FACULTY ACCESS";
+  $("#auth-title").textContent = "Welcome back";
+  $("#auth-intro").textContent = "Sign in with your institutional email. We’ll send a secure one-time code—no password required.";
+  $("#email-register").classList.add("hidden");
+  $("#otp-verify").classList.add("hidden");
+  $("#otp-request").classList.remove("hidden");
+  setAuthMessage(message);
+  $("#email").focus();
+}
+
+function showRegisterView(message = "") {
+  history.replaceState(null, "", "/register");
+  $("#auth-eyebrow").textContent = "FIRST-TIME VERIFICATION";
+  $("#auth-title").textContent = "Verify your email";
+  $("#auth-intro").textContent = "Enter your email once. We’ll send a verification link before OTP sign-in is enabled.";
+  $("#otp-request").classList.add("hidden");
+  $("#otp-verify").classList.add("hidden");
+  $("#email-register").classList.remove("hidden");
+  setAuthMessage(message);
+  const emailValue = $("#email").value || email;
+  if (emailValue) $("#register-email-input").value = emailValue;
+  $("#register-email-input").focus();
+}
+
 function updateDate() {
   const now = new Date();
   $("#today-day").textContent = String(now.getDate()).padStart(2, "0");
@@ -40,7 +66,12 @@ function showWorkspace(user) {
 }
 
 async function boot() {
-  try { showWorkspace(await api("/api/auth/me")); } catch (_) {}
+  try {
+    showWorkspace(await api("/api/auth/me"));
+  } catch (_) {
+    if (location.pathname === "/register") showRegisterView();
+    else if (location.search.includes("verified=1")) showLoginView("Email verified. You can request your OTP now.");
+  }
 }
 
 $("#otp-request").onsubmit = async (event) => {
@@ -54,10 +85,6 @@ $("#otp-request").onsubmit = async (event) => {
       method: "POST",
       body: JSON.stringify({ email }),
     });
-    if (data.status === "verification_required") {
-      setAuthMessage(data.message);
-      return;
-    }
     $("#otp-request").classList.add("hidden");
     $("#otp-verify").classList.remove("hidden");
     $("#otp-destination").textContent = `Sent to ${data.email}`;
@@ -70,12 +97,23 @@ $("#otp-request").onsubmit = async (event) => {
   }
 };
 
-$("#register-email").onclick = async () => {
-  const button = $("#register-email");
+$("#open-register").onclick = (event) => {
+  event.preventDefault();
+  showRegisterView();
+};
+
+$("#back-to-login").onclick = (event) => {
+  event.preventDefault();
+  showLoginView();
+};
+
+$("#email-register").onsubmit = async (event) => {
+  event.preventDefault();
+  const button = event.submitter;
   button.disabled = true;
   setAuthMessage("Requesting your first-time verification link…");
   try {
-    email = $("#email").value;
+    email = $("#register-email-input").value;
     const data = await api("/api/auth/register-email", {
       method: "POST",
       body: JSON.stringify({ email }),
