@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     session_ttl_minutes: int = 720
     cookie_name: str = "professor_ai_session"
     cookie_secure: bool = False
+    email_provider: str = "smtp"
+    ses_region: str | None = None
+    ses_from: str | None = None
+    require_verified_email_for_otp: bool = True
     smtp_host: str | None = None
     smtp_port: int = 587
     smtp_username: str | None = None
@@ -65,6 +69,14 @@ class Settings(BaseSettings):
     @property
     def is_postgresql(self) -> bool:
         return self.database_url.startswith("postgresql+psycopg://")
+
+    @property
+    def resolved_ses_region(self) -> str:
+        return self.ses_region or self.aws_region
+
+    @property
+    def resolved_from_email(self) -> str:
+        return (self.ses_from or self.smtp_from).strip()
 
 
 @lru_cache

@@ -26,19 +26,47 @@ router = APIRouter(prefix="/api")
 
 @router.post("/auth/request-otp")
 def request_otp(payload: OTPRequest, request: Request, db: Session = Depends(get_db)):
-    email, dev_otp = auth_service.request_otp(db, payload.email)
+    result = auth_service.request_otp(db, payload.email)
     audit(
         db,
-        tenant_id=email.split("@")[-1],
-        actor_email=email,
-        event_type="auth.otp_requested",
+        tenant_id=result.email.split("@")[-1],
+        actor_email=result.email,
+        event_type="auth.email_verification_requested"
+        if result.status == "verification_required"
+        else "auth.otp_requested",
         status="success",
         request=request,
+        details={"delivery": result.delivery, "status": result.status},
     )
-    response = {"message": "OTP sent.", "email": email}
-    if dev_otp:
-        response["dev_otp"] = dev_otp
+    response = {
+        "message": result.message,
+        "email": result.email,
+        "status": result.status,
+        "delivery": result.delivery,
+    }
+    if result.dev_otp:
+        response["dev_otp"] = result.dev_otp
     return response
+
+
+@router.post("/auth/register-email")
+def register_email(payload: OTPRequest, request: Request, db: Session = Depends(get_db)):
+    result = auth_service.register_email(db, payload.email)
+    audit(
+        db,
+        tenant_id=result.email.split("@")[-1],
+        actor_email=result.email,
+        event_type="auth.email_verification_requested",
+        status="success",
+        request=request,
+        details={"delivery": result.delivery, "status": result.status},
+    )
+    return {
+        "message": result.message,
+        "email": result.email,
+        "status": result.status,
+        "delivery": result.delivery,
+    }
 
 
 @router.post("/auth/verify")

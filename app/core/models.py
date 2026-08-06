@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -35,6 +35,18 @@ class OTPChallenge(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class EmailVerification(Base):
+    __tablename__ = "email_verifications"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    email: Mapped[str] = mapped_column(String(254), unique=True, index=True)
+    status: Mapped[str] = mapped_column(String(32), index=True)
+    provider: Mapped[str] = mapped_column(String(32), default="ses")
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    detail: Mapped[str] = mapped_column(Text, default="")
 
 
 class AuthSession(Base):

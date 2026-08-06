@@ -54,11 +54,33 @@ $("#otp-request").onsubmit = async (event) => {
       method: "POST",
       body: JSON.stringify({ email }),
     });
+    if (data.status === "verification_required") {
+      setAuthMessage(data.message);
+      return;
+    }
     $("#otp-request").classList.add("hidden");
     $("#otp-verify").classList.remove("hidden");
     $("#otp-destination").textContent = `Sent to ${data.email}`;
     setAuthMessage(data.dev_otp ? `Development code: ${data.dev_otp}` : data.message);
     $("#otp").focus();
+  } catch (error) {
+    setAuthMessage(error.message, true);
+  } finally {
+    button.disabled = false;
+  }
+};
+
+$("#register-email").onclick = async () => {
+  const button = $("#register-email");
+  button.disabled = true;
+  setAuthMessage("Requesting your first-time verification link…");
+  try {
+    email = $("#email").value;
+    const data = await api("/api/auth/register-email", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+    setAuthMessage(data.message);
   } catch (error) {
     setAuthMessage(error.message, true);
   } finally {

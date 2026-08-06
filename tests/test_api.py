@@ -2,6 +2,8 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from app.core.auth import auth_service
+from app.core.config import settings
 from app.main import app
 
 
@@ -53,3 +55,53 @@ def test_upload_and_both_agents() -> None:
         assert jobs.status_code == 200
         assert jobs.json()[0]["title"] == "Responsible AI adoption"
         assert Path("data").exists()
+
+
+def test_new_user_email_verification_starts_ses_identity(monkeypatch) -> None:
+    created: list[str] = []
+
+    class FakeSesClient:
+        def get_email_identity(self, **kwargs):
+            return {"VerificationStatus": "NOT_STARTED"}
+
+        def create_email_identity(self, **kwargs):
+            created.append(kwargs["EmailIdentity"])
+            return {}
+
+    monkeypatch.setattr(settings, "email_provider", "ses")
+    monkeypatch.setattr(settings, "otp_dev_mode", False)
+    monkeypatch.setattr(settings, "ses_from", "no-reply@professoraihub.com")
+    monkeypatch.setattr(auth_service, "_ses_client", lambda: FakeSesClient())
+
+    with TestClient(app) as client:
+        response = client.post("/api/auth/request-otp", json={"email": "new-prof@example.edu"})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "verification_required"
+    assert created == ["new-prof@example.edu"]
+
+
+def test_verified_ses_user_receives_otp(monkeypatch) -> None:
+    sent: list[dict] = []
+
+    class FakeSesClient:
+        def get_email_identity(self, **kwargs):
+            return {"VerificationStatus": "SUCCESS"}
+
+        def send_email(self, **kwargs):
+            sent.append(kwargs)
+            return {}
+
+    monkeypatch.setattr(settings, "email_provider", "ses")
+    monkeypatch.setattr(settings, "otp_dev_mode", False)
+    monkeypatch.setattr(settings, "ses_from", "no-reply@professoraihub.com")
+    monkeypatch.setattr(auth_service, "_ses_client", lambda: FakeSesClient())
+
+    with TestClient(app) as client:
+        response = client.post("/api/auth/request-otp", json={"email": "verified-prof@example.edu"})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "sent"
+    assert response.json()["delivery"] == "email"
+    assert sent[0]["FromEmailAddress"] == "no-reply@professoraihub.com"
+    assert sent[0]["Destination"] == {"ToAddresses": ["verified-prof@example.edu"]}
