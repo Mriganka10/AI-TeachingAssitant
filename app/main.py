@@ -27,6 +27,14 @@ static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 
+def spa_response() -> FileResponse:
+    response = FileResponse(static_dir / "index.html")
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
+
 @app.exception_handler(Exception)
 async def api_exception_handler(request: Request, exc: Exception):
     if request.url.path.startswith("/api/"):
@@ -47,14 +55,14 @@ def health():
 
 @app.get("/")
 def index():
-    return FileResponse(static_dir / "index.html")
+    return spa_response()
 
 
 @app.get("/login")
 def login():
-    return FileResponse(static_dir / "index.html")
+    return spa_response()
 
 
 @app.get("/register")
 def register():
-    return FileResponse(static_dir / "index.html")
+    return spa_response()
