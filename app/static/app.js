@@ -335,17 +335,47 @@ async function run(url, payload) {
   $("#downloads").innerHTML = "";
   $("#output").scrollIntoView({ behavior: "smooth", block: "start" });
   try {
-    const data = await api(url, { method: "POST", body: JSON.stringify(payload) });
+    const queued = await api(url, { method: "POST", body: JSON.stringify(payload) });
+    $("#result").textContent = "Your request is queued. Preparing professor-ready documents…";
+    const data = await waitForJob(queued.job_id);
+    if (data.status === "failed") {
+      throw new Error(data.error || "Agent generation failed. Please retry.");
+    }
     $("#result").textContent = JSON.stringify(data.result, null, 2);
-    $("#downloads").innerHTML = data.artifacts
-      .map((artifact) => `<a class="download" href="/api/artifacts/${artifact.id}">↓ Download ${artifact.type.toUpperCase()}</a>`)
-      .join("");
+    $("#downloads").innerHTML = renderDownloads(data.artifacts || []);
     await loadDashboard();
   } catch (error) {
     $("#result").textContent = error.message;
   } finally {
     $("#loader").classList.add("hidden");
   }
+}
+
+function renderDownloads(artifacts) {
+  return artifacts
+    .map((artifact) => `<a class="download" href="/api/artifacts/${artifact.id}">↓ Download ${artifact.type.toUpperCase()}</a>`)
+    .join("");
+}
+
+async function waitForJob(jobId) {
+  if (!jobId) {
+    throw new Error("The server did not return a job id. Please retry.");
+  }
+  const maxAttempts = 90;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const job = await api(`/api/jobs/${jobId}`);
+    if (job.status === "completed" || job.status === "failed") {
+      return job;
+    }
+    const elapsed = Math.max(1, attempt + 1) * 2;
+    $("#result").textContent = `Still working… generating documents and citations (${elapsed}s elapsed).`;
+    await sleep(2000);
+  }
+  throw new Error("The agent is still running. Please check Recent Faculty Work in a minute.");
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 $("#teaching-form").onsubmit = (event) => {

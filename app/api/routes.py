@@ -3,7 +3,17 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+)
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -15,7 +25,7 @@ from app.artifacts.generator import create_artifacts
 from app.core.audit import audit
 from app.core.auth import CurrentUser, auth_service, current_user
 from app.core.config import settings
-from app.core.database import get_db
+from app.core.database import SessionLocal, get_db
 from app.core.documents import extract_text
 from app.core.models import AgentJob, Artifact, SourceDocument
 from app.core.storage import checksum, storage
@@ -180,27 +190,30 @@ def list_documents(
 @router.post("/agents/teaching")
 def teaching_agent(
     payload: TeachingRequest,
+    background_tasks: BackgroundTasks,
     request: Request,
     user: CurrentUser = Depends(current_user),
     db: Session = Depends(get_db),
 ):
-    return _run_agent("teaching", payload.model_dump(), TEACHING_SYSTEM, request, user, db)
+    return _enqueue_agent("teaching", payload.model_dump(), TEACHING_SYSTEM, background_tasks, request, user, db)
 
 
 @router.post("/agents/research")
 def research_agent(
     payload: ResearchRequest,
+    background_tasks: BackgroundTasks,
     request: Request,
     user: CurrentUser = Depends(current_user),
     db: Session = Depends(get_db),
 ):
-    return _run_agent("research", payload.model_dump(), RESEARCH_SYSTEM, request, user, db)
+    return _enqueue_agent("research", payload.model_dump(), RESEARCH_SYSTEM, background_tasks, request, user, db)
 
 
-def _run_agent(
+def _enqueue_agent(
     agent_type: str,
     payload: dict,
     system_prompt: str,
+    background_tasks: BackgroundTasks,
     request: Request,
     user: CurrentUser,
     db: Session,
@@ -213,11 +226,46 @@ def _run_agent(
     )
     db.add(job)
     db.commit()
+    audit(
+        db,
+        tenant_id=user.tenant_id,
+        actor_email=user.email,
+        event_type=f"agent.{agent_type}.queued",
+        status="success",
+        request=request,
+        entity_type="job",
+        entity_id=job.id,
+        details={"async": True},
+    )
+    background_tasks.add_task(
+        _run_agent_job,
+        job.id,
+        agent_type,
+        payload,
+        system_prompt,
+        user.tenant_id,
+        user.email,
+    )
+    return _serialize_job(db, job, include_result=False)
+
+
+def _run_agent_job(
+    job_id: str,
+    agent_type: str,
+    payload: dict,
+    system_prompt: str,
+    tenant_id: str,
+    actor_email: str,
+) -> None:
+    db = SessionLocal()
     try:
+        job = db.get(AgentJob, job_id)
+        if not job:
+            return
         query = payload.get("topic") or payload.get("research_topic", "")
         contexts = retrieve_context(
             db,
-            tenant_id=user.tenant_id,
+            tenant_id=tenant_id,
             query=query,
             collections=payload.get("collections", []),
         )
@@ -235,7 +283,7 @@ def _run_agent(
         artifacts = []
         for path in paths:
             artifact = Artifact(
-                tenant_id=user.tenant_id,
+                tenant_id=tenant_id,
                 job_id=job.id,
                 artifact_type=path.suffix.lstrip("."),
                 filename=path.name,
@@ -247,7 +295,7 @@ def _run_agent(
             db.add(artifact)
             db.flush()
             artifact.storage_uri = storage.save(
-                path, tenant_id=user.tenant_id, category="artifacts", object_id=artifact.id
+                path, tenant_id=tenant_id, category="artifacts", object_id=artifact.id
             )
             artifacts.append(artifact)
         job.status = "completed"
@@ -257,41 +305,55 @@ def _run_agent(
         db.commit()
         audit(
             db,
-            tenant_id=user.tenant_id,
-            actor_email=user.email,
+            tenant_id=tenant_id,
+            actor_email=actor_email,
             event_type=f"agent.{agent_type}.completed",
             status="success",
-            request=request,
             entity_type="job",
             entity_id=job.id,
             details={"model": model, "artifact_count": len(artifacts)},
         )
-        return {
-            "job_id": job.id,
-            "status": job.status,
-            "result": result,
-            "artifacts": [
-                {"id": item.id, "filename": item.filename, "type": item.artifact_type}
-                for item in artifacts
-            ],
-        }
     except Exception as exc:
+        job = db.get(AgentJob, job_id)
+        if not job:
+            return
         job.status = "failed"
         job.error_message = str(exc)[:2000]
         job.completed_at = datetime.now(UTC)
         db.commit()
         audit(
             db,
-            tenant_id=user.tenant_id,
-            actor_email=user.email,
+            tenant_id=tenant_id,
+            actor_email=actor_email,
             event_type=f"agent.{agent_type}.failed",
             status="failed",
-            request=request,
             entity_type="job",
             entity_id=job.id,
             details={"error": str(exc)[:500]},
         )
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    finally:
+        db.close()
+
+
+def _serialize_job(db: Session, job: AgentJob, *, include_result: bool = True) -> dict:
+    artifacts = []
+    if job.status == "completed":
+        artifacts = db.scalars(
+            select(Artifact)
+            .where(Artifact.job_id == job.id, Artifact.tenant_id == job.tenant_id)
+            .order_by(Artifact.created_at.asc())
+        ).all()
+    response = {
+        "job_id": job.id,
+        "status": job.status,
+        "result": job.result_payload if include_result and job.status == "completed" else None,
+        "error": job.error_message if job.status == "failed" else None,
+        "artifacts": [
+            {"id": item.id, "filename": item.filename, "type": item.artifact_type}
+            for item in artifacts
+        ],
+    }
+    return response
 
 
 @router.get("/artifacts/{artifact_id}")
@@ -336,3 +398,20 @@ def list_jobs(user: CurrentUser = Depends(current_user), db: Session = Depends(g
         }
         for job in jobs
     ]
+
+
+@router.get("/jobs/{job_id}")
+def get_job(
+    job_id: str,
+    user: CurrentUser = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    job = db.scalar(
+        select(AgentJob).where(
+            AgentJob.id == job_id,
+            AgentJob.tenant_id == user.tenant_id,
+        )
+    )
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found.")
+    return _serialize_job(db, job)

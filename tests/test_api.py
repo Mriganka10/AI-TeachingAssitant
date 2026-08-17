@@ -39,14 +39,19 @@ def test_upload_and_both_agents() -> None:
             json={"topic": "Responsible AI", "use_web_search": False},
         )
         assert teaching.status_code == 200
-        assert {a["type"] for a in teaching.json()["artifacts"]} == {"json", "docx", "pdf", "pptx"}
+        teaching_job = client.get(f"/api/jobs/{teaching.json()['job_id']}")
+        assert teaching_job.status_code == 200
+        assert teaching_job.json()["status"] == "completed"
+        assert {a["type"] for a in teaching_job.json()["artifacts"]} == {"json", "docx", "pdf", "pptx"}
         research = client.post(
             "/api/agents/research",
             json={"research_topic": "Responsible AI adoption", "use_web_search": False},
         )
         assert research.status_code == 200
-        assert research.json()["result"]["research_gaps"]
-        assert {a["type"] for a in research.json()["artifacts"]} == {
+        research_job = client.get(f"/api/jobs/{research.json()['job_id']}")
+        assert research_job.status_code == 200
+        assert research_job.json()["result"]["research_gaps"]
+        assert {a["type"] for a in research_job.json()["artifacts"]} == {
             "json",
             "docx",
             "pdf",
@@ -154,9 +159,12 @@ def test_agent_failure_returns_json_detail(monkeypatch) -> None:
             json={"topic": "Responsible AI", "use_web_search": False},
         )
 
-    assert response.status_code == 502
+        failed_job = client.get(f"/api/jobs/{response.json()['job_id']}")
+
+    assert response.status_code == 200
     assert response.headers["content-type"].startswith("application/json")
-    assert response.json()["detail"] == "simulated upstream failure"
+    assert failed_job.json()["status"] == "failed"
+    assert failed_job.json()["error"] == "simulated upstream failure"
 
 
 def test_frontend_handles_non_json_api_responses() -> None:
@@ -165,3 +173,5 @@ def test_frontend_handles_non_json_api_responses() -> None:
     assert "parseApiResponse" in script
     assert "nonJsonApiMessage" in script
     assert "HTML page instead of agent data" in script
+    assert "waitForJob" in script
+    assert "/api/jobs/" in script
