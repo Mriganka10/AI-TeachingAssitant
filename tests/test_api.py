@@ -2,6 +2,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from app.api import routes
 from app.core.auth import auth_service
 from app.core.config import settings
 from app.main import app
@@ -138,3 +139,29 @@ def test_register_page_contains_first_time_verification_view() -> None:
     assert response.status_code == 200
     assert 'id="email-register"' in response.text
     assert "Send verification link" in response.text
+
+
+def test_agent_failure_returns_json_detail(monkeypatch) -> None:
+    def fail_generate(**kwargs):
+        raise RuntimeError("simulated upstream failure")
+
+    monkeypatch.setattr(routes.llm, "generate", fail_generate)
+
+    with TestClient(app) as client:
+        login(client)
+        response = client.post(
+            "/api/agents/teaching",
+            json={"topic": "Responsible AI", "use_web_search": False},
+        )
+
+    assert response.status_code == 502
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.json()["detail"] == "simulated upstream failure"
+
+
+def test_frontend_handles_non_json_api_responses() -> None:
+    script = Path("app/static/app.js").read_text()
+
+    assert "parseApiResponse" in script
+    assert "nonJsonApiMessage" in script
+    assert "HTML page instead of agent data" in script

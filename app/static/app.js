@@ -4,11 +4,47 @@ let email = "";
 
 async function api(url, options = {}) {
   const response = await fetch(url, {
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    headers: { Accept: "application/json", "Content-Type": "application/json", ...(options.headers || {}) },
     ...options,
   });
-  if (!response.ok) throw new Error((await response.json()).detail || "Request failed");
-  return response.json();
+  return parseApiResponse(response, url);
+}
+
+async function parseApiResponse(response, url = "request") {
+  const contentType = response.headers.get("content-type") || "";
+  const raw = await response.text();
+  const isJson = contentType.includes("application/json");
+  let payload = null;
+
+  if (isJson && raw) {
+    try {
+      payload = JSON.parse(raw);
+    } catch (_) {
+      throw new Error("The server returned malformed JSON. Please retry the request.");
+    }
+  }
+
+  if (!response.ok) {
+    const detail = payload?.detail || payload?.message;
+    if (detail) throw new Error(detail);
+    throw new Error(nonJsonApiMessage(response, raw, url));
+  }
+
+  if (!isJson) {
+    throw new Error(nonJsonApiMessage(response, raw, url));
+  }
+  return payload ?? {};
+}
+
+function nonJsonApiMessage(response, raw, url) {
+  const preview = String(raw || "").trim().slice(0, 120);
+  if (response.status === 401 || preview.includes("<!DOCTYPE")) {
+    return "The server returned an HTML page instead of agent data. Please refresh, sign in again, and retry.";
+  }
+  if ([502, 503, 504].includes(response.status)) {
+    return "The agent service timed out or was temporarily unavailable. Please retry in a minute.";
+  }
+  return `Unexpected server response for ${url}. Please refresh and try again.`;
 }
 
 function setAuthMessage(message = "", isError = false) {
@@ -280,7 +316,7 @@ $("#upload-form").onsubmit = async (event) => {
   button.textContent = "Uploading…";
   try {
     const response = await fetch("/api/documents", { method: "POST", body: data });
-    if (!response.ok) throw new Error((await response.json()).detail);
+    await parseApiResponse(response, "/api/documents");
     event.target.reset();
     $(".file-button span").textContent = "Choose document";
     await loadDashboard();
