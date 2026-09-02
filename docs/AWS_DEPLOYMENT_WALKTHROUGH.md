@@ -36,9 +36,15 @@ S3 stores durable files:
 The application calls the OpenAI Responses API to generate structured teaching and research
 content. The optional web-search tool is enabled per professor request.
 
-### SMTP or Amazon SES
+### Amazon SES or SMTP
 
-SMTP delivers the one-time login code. Local development can display an OTP, but production cannot.
+Amazon SES or SMTP delivers first-time verification emails and one-time login codes. Local
+development can display an OTP, but production cannot.
+
+### CloudFront and Route 53
+
+CloudFront fronts the Elastic Beanstalk origin for HTTPS custom-domain access. Route 53 hosts the
+DNS zone for `professoraihub.com` and points the domain to the CloudFront distribution.
 
 ## Deployment Sequence
 
@@ -81,8 +87,8 @@ SMTP delivers the one-time login code. Local development can display an OTP, but
    - health endpoint
    - OTP
    - upload
-   - both agents
-   - artifact persistence
+   - both agents enqueue jobs and complete through status polling
+   - JSON, DOCX, PDF, and PPTX artifact persistence
    - RDS and S3 evidence
 
 10. **Add domain and HTTPS**
@@ -126,6 +132,12 @@ Check the EB EC2 instance role, bucket name, prefix, KMS permissions, and bucket
 Rotate the key and update the EB environment. A key stored in an old repository or screenshot may
 already be invalid or revoked.
 
+### Browser shows an HTML/JSON parsing message
+
+Confirm the deployed `index.html` points to the latest versioned `app.js`, then check CloudFront
+and Nginx logs. Agent requests should return a `job_id` quickly and the UI should poll
+`/api/jobs/{job_id}` instead of waiting for a long-running request.
+
 ## Go-Live Checklist
 
 - [ ] HTTPS is active.
@@ -137,6 +149,8 @@ already be invalid or revoked.
 - [ ] RDS is private and backed up.
 - [ ] OpenAI and SMTP secrets are not in Git.
 - [ ] Teaching and research outputs are reviewed.
+- [ ] Teaching and research jobs complete through async polling.
+- [ ] JSON, DOCX, PDF, and PPTX downloads work for both agents.
 - [ ] Audit events are visible.
 - [ ] CloudWatch alerts are configured.
 - [ ] Retention and deletion rules are approved.

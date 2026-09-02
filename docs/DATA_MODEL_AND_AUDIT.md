@@ -54,10 +54,15 @@ Stores actor, tenant, event type, entity, status, request ID, IP address, detail
 - `auth.otp_requested`
 - `auth.login`
 - `document.uploaded`
+- `agent.teaching.queued`
 - `agent.teaching.completed`
 - `agent.teaching.failed`
+- `agent.research.queued`
 - `agent.research.completed`
 - `agent.research.failed`
+
+Queued events are emitted when the HTTP request creates a job. Completion and failure events are
+emitted by the asynchronous background task.
 
 ## Useful PostgreSQL Queries
 

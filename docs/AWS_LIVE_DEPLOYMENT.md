@@ -1,17 +1,24 @@
 # AWS Live Deployment
 
-Deployment date: 22 June 2026  
+Initial deployment date: 22 June 2026  
+Latest production update: 17 August 2026  
 Region: `ap-south-1`  
 Source branch: `release_branch`  
-Deployed release: `b0cfaa0`
+Deployed release: `47e8810` — async agent generation and job polling
 
 ## Public Endpoint
+
+Primary domain:
+
+`https://professoraihub.com`
+
+Elastic Beanstalk origin:
 
 `http://ai-teaching-assistant-prod.ap-south-1.elasticbeanstalk.com`
 
 Health endpoint:
 
-`http://ai-teaching-assistant-prod.ap-south-1.elasticbeanstalk.com/health`
+`https://professoraihub.com/health`
 
 ## Resource Inventory
 
@@ -28,6 +35,10 @@ Health endpoint:
 | PostgreSQL instance | `ai-teaching-assistant-prod-db` |
 | PostgreSQL engine | PostgreSQL 18.3, encrypted, private, deletion-protected |
 | S3 bucket | `ai-teaching-assistant-prod-453732174568-ap-south-1` |
+| CloudFront distribution | `E2BBR56BCXF4NL` |
+| CloudFront domain | `d2r0ksdo6bzlza.cloudfront.net` |
+| Route 53 hosted zone | `Z03261912TTDFCC1BX1H6` |
+| Custom domain | `professoraihub.com` |
 | Database credentials | AWS Secrets Manager secret `ai-teaching-assistant-prod/database` |
 | EB service role | `ai-teaching-assistant-prod-eb-service-role` |
 | EC2 role | `ai-teaching-assistant-prod-ec2-role` |
@@ -46,17 +57,28 @@ All resources are dedicated to this application and tagged with
 - S3 RAG upload: verified
 - Teaching Assistant OpenAI run: verified with JSON, DOCX, PDF, and PPTX artifacts
 - Research Assistant OpenAI run: verified with JSON, DOCX, PDF, and PPTX artifacts
+- Agent generation flow: verified as queued job plus `GET /api/jobs/{job_id}` polling
 - Artifact download through the authenticated endpoint: verified
 
 ## Current Authentication Mode
 
-The environment currently uses staging/development OTP behavior because SMTP/SES credentials have
-not been supplied. Before opening the service to real faculty users:
+The environment supports first-time professor email verification and OTP delivery through the
+configured production email provider. For Amazon SES, the sender/domain identities must remain
+verified and the environment must keep production-safe values:
 
-1. configure Amazon SES or another SMTP provider;
-2. set `ENVIRONMENT=production` and `OTP_DEV_MODE=false`;
-3. attach an ACM certificate through a load-balanced Beanstalk environment or a custom HTTPS
-   endpoint;
-4. set `COOKIE_SECURE=true`.
+1. `ENVIRONMENT=production`;
+2. `OTP_DEV_MODE=false`;
+3. `COOKIE_SECURE=true`;
+4. `EMAIL_PROVIDER=ses` or configured SMTP settings;
+5. verified sender such as `no-reply@professoraihub.com`.
+
+## Current Agent Execution Mode
+
+The deployed release uses in-process FastAPI background tasks for agent generation. The browser
+gets a `job_id` immediately and polls job status until JSON, DOCX, PDF, and PPTX artifacts are
+available. This avoids CloudFront/Nginx timeout HTML pages for normal long-running agent work.
+
+For higher concurrency, migrate this same job contract to SQS plus worker instances without
+changing the professor-facing API shape.
 
 No credentials or API keys are stored in this document or committed to the repository.

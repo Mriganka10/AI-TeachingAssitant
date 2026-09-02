@@ -16,6 +16,8 @@ Current integration tests cover:
 - teaching agent in mock mode
 - research agent in mock mode
 - expected artifact formats
+- async job polling endpoint
+- failed async job behavior
 - job title metadata
 
 ## Manual Faculty UI Test
@@ -27,12 +29,14 @@ Current integration tests cover:
 5. Upload one source into each relevant collection.
 6. Open Teaching Assistant.
 7. Generate a mock or live lecture package.
-8. Download JSON, DOCX, PDF, and PPTX.
-9. Open Research Paper Assistant.
-10. Generate a research synthesis.
-11. Download JSON, DOCX, and PDF.
-12. Confirm recent activity and readiness metrics update.
-13. Sign out and verify protected endpoints reject the old session.
+8. Confirm the UI shows queued/running status rather than blocking indefinitely.
+9. Download JSON, DOCX, PDF, and PPTX.
+10. Open Research Paper Assistant.
+11. Generate a research synthesis.
+12. Confirm the UI polls until the job is completed.
+13. Download JSON, DOCX, PDF, and PPTX.
+14. Confirm recent activity and readiness metrics update.
+15. Sign out and verify protected endpoints reject the old session.
 
 ## Live OpenAI Acceptance Test
 
@@ -43,7 +47,8 @@ Use a low-risk topic and verify:
 - sources are not fabricated
 - web search can be disabled and enabled
 - latency is acceptable
-- failed credentials produce a controlled 502
+- failed generation produces a failed job with a bounded error message
+- the browser never displays raw `Unexpected token '<'` JSON parsing errors
 
 Never put the API key in test fixtures or screenshots.
 

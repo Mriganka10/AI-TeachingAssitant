@@ -13,7 +13,7 @@ Python 3.12 matches the Docker image and is the preferred local version.
 ```bash
 git clone https://github.com/Mriganka10/AI-TeachingAssitant.git
 cd AI-TeachingAssitant
-git checkout feature/prototype_development_v1
+git checkout release_branch
 ```
 
 ## Create Environment
@@ -86,8 +86,12 @@ Production must use:
 ENVIRONMENT=production
 OTP_DEV_MODE=false
 COOKIE_SECURE=true
-SMTP_HOST=<smtp-host>
+EMAIL_PROVIDER=ses
+SES_FROM=<verified-sender>
 ```
+
+SMTP is also supported by configuring `SMTP_HOST`, `SMTP_USERNAME`, `SMTP_PASSWORD`, and
+`SMTP_FROM`.
 
 ## Tests and Lint
 
@@ -127,8 +131,14 @@ commit the key.
 
 ### PDF contains no text
 
-The PDF may be scanned. The current extractor handles text PDFs; add OCR or convert the scan to
-searchable text.
+The PDF may be scanned. Text PDFs are extracted natively. For scanned PDFs, enable OCR and install
+the local OCR dependencies for development, or configure Amazon Textract in AWS:
+
+```text
+OCR_ENABLED=true
+OCR_PROVIDER=local      # local development
+OCR_PROVIDER=textract   # AWS production
+```
 
 ### OTP is not delivered
 

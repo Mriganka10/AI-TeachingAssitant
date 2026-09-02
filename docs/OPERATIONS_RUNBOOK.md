@@ -54,6 +54,23 @@ Inspect:
 - OpenAI key, quota, and model access
 - whether model output was valid JSON
 
+The browser should receive a queued `job_id` quickly. If users report an HTML/JSON parsing message,
+check CloudFront/Nginx logs for timeouts or cached frontend assets, then verify the deployed
+`app.js` asset version in `index.html`.
+
+### Agent stays running
+
+Inspect:
+
+- whether the EB instance is CPU/memory constrained
+- OpenAI latency or rate limits
+- OCR/document extraction duration for large uploads
+- job row `started_at` age
+- application container logs
+
+The current implementation uses in-process FastAPI background tasks. A container restart can
+interrupt running work; high-concurrency production should use SQS and worker instances.
+
 ### Artifact cannot be downloaded
 
 Check:
@@ -66,8 +83,8 @@ Check:
 
 ### Upload extraction fails
 
-Confirm supported format and file size. A scanned PDF can upload but may contain no extractable
-text; OCR is a future enhancement.
+Confirm supported format and file size. Text PDFs are extracted natively. Scanned PDFs require OCR
+configuration: local Tesseract for development or Amazon Textract for AWS production.
 
 ## Database Recovery
 

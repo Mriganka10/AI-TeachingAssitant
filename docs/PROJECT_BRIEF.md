@@ -47,6 +47,7 @@ Given a research topic and uploaded papers, the agent can produce:
 - future scope
 - methodology suggestions
 - APA-style reference list
+- presentation-ready PPTX summary
 
 ## Product Principles
 
@@ -63,15 +64,17 @@ Given a research topic and uploaded papers, the agent can produce:
 - A professor can upload trusted notes, books, cases, and research papers.
 - Both assistants can use the professor's tenant-scoped source library.
 - Teaching output is downloadable as JSON, DOCX, PDF, and PPTX.
-- Research output is downloadable as JSON, DOCX, and PDF.
+- Research output is downloadable as JSON, DOCX, PDF, and PPTX.
 - Agent jobs, artifacts, and security events are traceable.
 - The same code runs locally and on AWS Elastic Beanstalk.
 
 ## Current Boundaries
 
-- Agent execution is synchronous.
+- Agent execution uses an in-app asynchronous job flow with job polling. Durable queue workers
+  such as SQS/Celery/RQ are still recommended before high-concurrency production scale.
 - Retrieval is bounded lexical ranking rather than vector search.
-- PDF extraction supports text PDFs; scanned PDFs require a future OCR provider.
+- PDF extraction supports text PDFs and can use local OCR or Amazon Textract for scanned PDFs when
+  OCR is configured.
 - References and factual claims require professor review before academic use.
-- Production email delivery requires SMTP or Amazon SES configuration.
-- High-concurrency deployment requires a background-job architecture.
+- Production email delivery and first-time email verification require SMTP or Amazon SES
+  configuration.

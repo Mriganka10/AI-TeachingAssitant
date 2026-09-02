@@ -7,7 +7,7 @@ Elastic Beanstalk -> EC2 -> FastAPI
                          +-> RDS PostgreSQL
                          +-> private S3
                          +-> OpenAI API
-                         +-> SMTP / Amazon SES
+                         +-> Amazon SES / SMTP
 ```
 
 Recommended region for this project is `ap-south-1`, matching the application defaults. Choose a
@@ -20,7 +20,7 @@ different region only after updating resource configuration consistently.
 - Private S3 bucket
 - RDS PostgreSQL instance
 - Security groups connecting EB EC2 to RDS
-- SMTP provider or Amazon SES SMTP credentials
+- Amazon SES sender/domain identity or SMTP credentials
 - CloudWatch logs and alarms
 - ACM certificate and load balancer for HTTPS
 
@@ -40,6 +40,9 @@ OTP_DEV_MODE=false
 OTP_TTL_MINUTES=10
 SESSION_TTL_MINUTES=720
 COOKIE_SECURE=true
+EMAIL_PROVIDER=ses
+SES_REGION=ap-south-1
+SES_FROM=<verified-sender>
 SMTP_HOST=<smtp-host>
 SMTP_PORT=587
 SMTP_USERNAME=<smtp-user>
@@ -90,6 +93,8 @@ The EB EC2 role needs only:
 - optionally `s3:DeleteObject`
 - `kms:Encrypt`, `kms:Decrypt`, and `kms:GenerateDataKey` when using KMS
 - `textract:DetectDocumentText` when `OCR_PROVIDER=textract`
+- `ses:SendEmail`, `ses:GetEmailIdentity`, and `ses:CreateEmailIdentity` when
+  `EMAIL_PROVIDER=ses` and first-time email verification is enabled through SES
 
 Scope permissions to the application bucket and prefix.
 
@@ -157,8 +162,8 @@ Then verify:
 2. session cookie behavior
 3. document upload to S3
 4. document metadata in RDS
-5. both agent runs
-6. artifact download after instance replacement
+5. both agent runs enqueue quickly and complete through `GET /api/jobs/{job_id}`
+6. JSON, DOCX, PDF, and PPTX artifact download after instance replacement
 7. audit-event rows
 8. scanned-PDF ingestion through Textract
 9. CloudWatch application logs
@@ -167,6 +172,7 @@ Then verify:
 
 - SQLite must not be used across multiple instances.
 - Local EC2 disk is temporary and must not be the source of record.
-- Synchronous agent calls can exceed comfortable web-request duration.
+- Current async jobs run in-process. They avoid browser/proxy timeouts, but a container restart can
+  interrupt active work.
 - Apply and review Alembic migrations before every production release.
-- Introduce a queue/worker design before heavy or multi-user usage.
+- Introduce SQS/Celery/RQ workers before heavy or multi-user usage.

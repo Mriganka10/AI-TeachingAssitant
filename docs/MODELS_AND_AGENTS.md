@@ -20,9 +20,9 @@ system prompts, input schemas, selected source collections, and output requireme
 | Research synthesis | OpenAI Responses API | Generate structured research analysis. |
 | Current public research | OpenAI `web_search` tool | Supplement uploaded sources when enabled. |
 | Local retrieval | Token-frequency lexical ranking | Select bounded tenant document excerpts. |
-| PDF extraction | `pypdf` | Extract text from text-based PDFs. |
+| PDF extraction | `pypdf` + optional OCR | Extract text PDFs and scanned PDFs when OCR is configured. |
 | DOCX extraction | `python-docx` | Extract document paragraphs. |
-| PPTX generation | `python-pptx` | Build teaching slides. |
+| PPTX generation | `python-pptx` | Build teaching and research presentation decks. |
 | PDF generation | ReportLab | Build downloadable reports. |
 | Mock testing | Deterministic Python templates | Test without API cost or network dependency. |
 
@@ -39,6 +39,13 @@ system prompts, input schemas, selected source collections, and output requireme
 
 The service expects one valid JSON object and rejects invalid JSON rather than silently accepting
 unstructured output.
+
+## Execution Pattern
+
+Agent requests are queued as `AgentJob` rows and executed in application background tasks. The API
+returns a `job_id` immediately; the UI polls `GET /api/jobs/{job_id}` until structured output and
+downloadable artifacts are ready. This keeps long OpenAI and document-generation work away from
+the original browser request.
 
 ## Mode Selection
 

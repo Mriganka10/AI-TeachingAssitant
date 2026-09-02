@@ -32,7 +32,7 @@ A deployable, multi-tenant baseline for two professor-facing agents:
 Browser
   │ email + OTP / HTTPS
   ▼
-Elastic Beanstalk (nginx + FastAPI)
+CloudFront + Elastic Beanstalk (nginx + FastAPI)
   ├── EC2 application instances
   ├── PostgreSQL/RDS: users, OTPs, sessions, jobs, documents, artifacts, audit events
   ├── S3: tenant-isolated uploads, RAG sources, generated PPTX/PDF/DOCX/JSON
@@ -61,8 +61,8 @@ in the UI. Use `LLM_SERVICE_MODE=mock` to test without calling OpenAI.
 
 - `POST /api/auth/request-otp`, `POST /api/auth/verify`, `POST /api/auth/logout`
 - `POST /api/documents`, `GET /api/documents`
-- `POST /api/agents/teaching`, `POST /api/agents/research`
-- `GET /api/jobs`, `GET /api/artifacts/{id}`
+- `POST /api/agents/teaching`, `POST /api/agents/research` — enqueue agent jobs
+- `GET /api/jobs`, `GET /api/jobs/{job_id}`, `GET /api/artifacts/{id}`
 - `GET /health`
 
 Interactive API documentation is available at `/docs`.
@@ -73,6 +73,8 @@ Interactive API documentation is available at `/docs`.
 - OTPs expire, are single-use, and stop verifying after five failed attempts.
 - Cookies are HTTP-only, SameSite=Lax, and Secure in production.
 - Every login, upload, successful agent run, and failed agent run creates an `audit_events` row.
+- Agent requests are queued immediately, then completed asynchronously and tracked through
+  `agent_jobs`.
 - Every query is tenant-scoped; S3 keys use `tenants/{tenant_id}/...`.
 - Uploads enforce extension and size allow-lists. S3 server-side encryption is enabled, with
   optional KMS.
@@ -117,12 +119,17 @@ ruff check .
 pytest
 ```
 
-## Current production boundaries
+## Current production behavior and boundaries
 
-- Agent execution is synchronous. Add SQS/Celery workers before enabling long-running jobs at
-  high concurrency.
+- Agent execution uses an in-app asynchronous job flow: API calls enqueue work quickly, the UI
+  polls job status, and completed jobs expose JSON, DOCX, PDF, and PPTX artifacts.
+- For high concurrency, move the current in-process background task execution to SQS/Celery/RQ or
+  an Elastic Beanstalk worker tier.
 - Retrieval currently ranks up to 250 tenant documents lexically and sends bounded excerpts.
   For large corpora, add OpenAI vector stores, pgvector, or Qdrant while retaining S3 as the
   source-of-record.
-- SMTP is required when `ENVIRONMENT=production` and development OTP mode is disabled.
+- Production OTP and first-time email verification use Amazon SES/SMTP configuration; development
+  mode can display local OTPs.
+- Scanned PDFs are supported when OCR is configured locally or through Amazon Textract; text PDFs
+  continue to use native extraction.
 - Model-created citations must still be reviewed by a professor before publication.

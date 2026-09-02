@@ -14,6 +14,10 @@ Status: implemented.
 - local/S3 storage
 - audit tables
 - Docker and Elastic Beanstalk foundations
+- in-app asynchronous agent jobs with status polling
+- first-time SES email verification followed by OTP login
+- 50 MB upload limit through app and Nginx
+- OCR configuration hooks for scanned PDFs
 - tests and linting
 
 ## Phase 2: Retrieval Quality
@@ -37,7 +41,10 @@ Status: implemented.
 - prompt/model version tracking
 - faculty feedback and regeneration controls
 
-## Phase 4: Background Processing
+## Phase 4: Durable Background Processing
+
+The current release has in-process async jobs. This phase moves that behavior onto durable
+infrastructure for higher concurrency and better retry semantics.
 
 - SQS job queue
 - worker service
@@ -81,7 +88,7 @@ Status: implemented.
 1. Add vector-backed, chunk-level retrieval.
 2. Enforce output schemas at model-call level.
 3. Add citation verification and visible provenance.
-4. Add SQS-based asynchronous jobs.
+4. Move in-process async jobs to SQS-backed durable workers.
 5. Add Alembic migrations.
 6. Add OTP rate limiting and CSRF protection.
 7. Add professor-controlled deletion and retention.

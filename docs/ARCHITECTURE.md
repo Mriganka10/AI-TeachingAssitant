@@ -11,8 +11,8 @@ FastAPI Web Application
        +-- Email OTP Authentication
        +-- Faculty Dashboard
        +-- Document Upload API
-       +-- Teaching Agent API
-       +-- Research Agent API
+       +-- Teaching Agent API -> async job polling
+       +-- Research Agent API -> async job polling
        |
        v
 Tenant-Scoped Application Services
@@ -71,8 +71,9 @@ Supported source formats are PDF, DOCX, TXT, MD, and CSV.
 
 ```text
 Faculty request
-  -> create running agent_job
-  -> retrieve tenant-scoped source excerpts
+  -> create running agent_job and return job_id
+  -> UI polls GET /api/jobs/{job_id}
+  -> in-process background task retrieves tenant-scoped source excerpts
   -> build controlled model payload
   -> call OpenAI or deterministic mock
   -> parse structured JSON
@@ -83,6 +84,8 @@ Faculty request
 ```
 
 Failures mark the job as `failed`, store a bounded error message, and create a failed audit event.
+The original browser request is not held open for the full model/document-generation duration,
+which prevents CloudFront or Nginx timeout pages from being parsed as JSON by the UI.
 
 ## Local Architecture
 
@@ -115,8 +118,12 @@ RDS is the durable metadata/audit store. S3 is the durable file source of record
 
 ## Scaling Boundary
 
-The current request thread performs model calls and document generation synchronously. Before
-autoscaling or enabling large research corpora, introduce:
+The current release uses FastAPI background tasks for asynchronous job execution. This removes the
+single long-running browser request from the user flow and is suitable for a small single-instance
+or low-concurrency Elastic Beanstalk deployment.
+
+Before autoscaling or enabling large research corpora, move job execution from in-process
+background tasks to a durable queue/worker design:
 
 - SQS job queue
 - background workers on ECS, EC2, or Elastic Beanstalk worker tier

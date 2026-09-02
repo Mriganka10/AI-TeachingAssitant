@@ -28,14 +28,15 @@ Use this explanation:
 
 > Professor AI is a FastAPI application with email OTP login and two explicit specialist
 > assistants. A professor uploads tenant-scoped academic sources, selects Teaching or Research,
-> and submits a controlled request. The application retrieves bounded excerpts from the professor's
-> library, optionally uses OpenAI web search, requires structured JSON output, generates academic
-> artifacts, stores metadata and audit events in SQL, and persists files locally or in encrypted S3.
+> and submits a controlled request. The application queues a tenant-scoped agent job, retrieves
+> bounded excerpts from the professor's library, optionally uses OpenAI web search, requires
+> structured JSON output, generates academic artifacts, stores metadata and audit events in SQL,
+> and persists files locally or in encrypted S3.
 
 ## Local Demonstration
 
 ```bash
-git checkout feature/prototype_development_v1
+git checkout release_branch
 python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e ".[dev]"
@@ -58,12 +59,14 @@ Open `http://127.0.0.1:8000`.
 3. Show the faculty dashboard and two assistants.
 4. Upload a previous note or research paper.
 5. Generate a lecture package.
-6. Download the PowerPoint and PDF.
-7. Generate a research synthesis.
-8. Show research gaps and methodology comparison.
-9. Show recent activity and source counts.
-10. Explain tenant isolation, audit tables, S3, and AWS deployment.
-11. State clearly that professors review all generated material.
+6. Point out the queued/running job status while the agent works.
+7. Download JSON, DOCX, PDF, and PPTX.
+8. Generate a research synthesis.
+9. Show research gaps and methodology comparison.
+10. Download JSON, DOCX, PDF, and PPTX.
+11. Show recent activity and source counts.
+12. Explain tenant isolation, audit tables, S3, and AWS deployment.
+13. State clearly that professors review all generated material.
 
 ## Owner Decisions Needed Before Production
 
@@ -77,14 +80,14 @@ Open `http://127.0.0.1:8000`.
 - approved OpenAI model and budget
 - whether current web search is allowed
 - research-paper license and privacy constraints
-- production background-job design
+- whether to keep in-process async jobs or move to SQS workers for scale
 
 ## Current Production Gaps
 
-- synchronous execution
+- in-process async execution should move to durable SQS workers before high-concurrency use
 - lexical rather than vector retrieval
 - no citation verification
-- no OCR for scanned PDFs
+- OCR requires local Tesseract or Amazon Textract configuration and operational validation
 - no CSRF or OTP rate limiting
 - no Alembic migrations
 - no institutional SSO
@@ -95,7 +98,7 @@ Open `http://127.0.0.1:8000`.
 1. Rotate and centralize all secrets.
 2. Create dev/stage/prod environments.
 3. Add Alembic.
-4. Add queue and workers.
+4. Move async jobs to SQS-backed workers.
 5. Add vector retrieval and citation provenance.
 6. Add CSRF, rate limiting, and domain allow-list.
 7. Run security, privacy, and academic-integrity review.

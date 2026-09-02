@@ -4,18 +4,21 @@
 
 Professor AI contains two specialist agents. There is no free-form autonomous supervisor in the
 current implementation. The professor explicitly chooses the appropriate assistant from the
-dashboard, and the matching route uses a controlled prompt and response contract.
+dashboard, and the matching route uses a controlled prompt and response contract. Agent execution
+is queued as an application job so the browser does not hold a long-running request open.
 
 ```text
 Professor
    |
    +-- Teaching Assistant
+   |      -> queue agent job
    |      -> retrieve notes/books/cases
    |      -> optional web search
    |      -> structured teaching package
    |      -> PPTX, DOCX, PDF, JSON
    |
    +-- Research Paper Assistant
+          -> queue agent job
           -> retrieve research papers
           -> optional web search
           -> structured research synthesis
@@ -25,6 +28,9 @@ Professor
 ## AI Teaching Assistant
 
 Endpoint: `POST /api/agents/teaching`
+
+The endpoint returns a `job_id` quickly. The UI polls `GET /api/jobs/{job_id}` until the job is
+`completed` or `failed`.
 
 Prompt: `TEACHING_SYSTEM` in `app/agents/prompts.py`
 
@@ -74,6 +80,9 @@ alignment, accessibility, and institutional assessment policy.
 
 Endpoint: `POST /api/agents/research`
 
+The endpoint returns a `job_id` quickly. The UI polls `GET /api/jobs/{job_id}` until the job is
+`completed` or `failed`.
+
 Prompt: `RESEARCH_SYSTEM` in `app/agents/prompts.py`
 
 Default UI collection:
@@ -121,11 +130,12 @@ Both agents use:
 4. `create_artifacts` for export.
 5. `StorageService` for local/S3 persistence.
 6. `AuditEvent` for success and failure traceability.
+7. FastAPI background tasks for the current in-app asynchronous execution model.
 
 ## Failure Behavior
 
-- Missing OpenAI key in OpenAI mode returns a failed job and HTTP 502.
-- Invalid model JSON returns a failed job and HTTP 502.
+- Missing OpenAI key in OpenAI mode marks the queued job as `failed`.
+- Invalid model JSON marks the queued job as `failed`.
 - Upload extraction errors return a client error and do not create a ready document.
 - Artifact access from another tenant returns 404.
 

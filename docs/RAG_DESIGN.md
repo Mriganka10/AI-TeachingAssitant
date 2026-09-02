@@ -25,6 +25,8 @@ Extension and size validation
         v
 Text extraction
         |
+        +-- optional OCR fallback for scanned PDFs
+        |
         v
 source_documents database row
         |
@@ -68,7 +70,8 @@ Artifact and download queries are also tenant-scoped.
 - No vector embeddings are stored.
 - No reranking or citation verification exists.
 - Large PDFs can exceed useful model context even with bounding.
-- Scanned PDFs are not OCR-processed.
+- Scanned PDFs require OCR configuration. Local development can use Tesseract/PyMuPDF, while AWS
+  production should use Amazon Textract when OCR is enabled.
 
 ## Production Upgrade
 
