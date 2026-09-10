@@ -27,6 +27,7 @@ from app.core.auth import CurrentUser, auth_service, current_user
 from app.core.config import settings
 from app.core.database import SessionLocal, get_db
 from app.core.documents import extract_text
+from app.core.job_queue import enqueue_agent_job
 from app.core.models import AgentJob, Artifact, SourceDocument
 from app.core.storage import checksum, storage
 from app.schemas import OTPRequest, OTPVerify, ResearchRequest, TeachingRequest
@@ -195,7 +196,7 @@ def teaching_agent(
     user: CurrentUser = Depends(current_user),
     db: Session = Depends(get_db),
 ):
-    return _enqueue_agent("teaching", payload.model_dump(), TEACHING_SYSTEM, background_tasks, request, user, db)
+    return _enqueue_agent("teaching", payload.model_dump(), background_tasks, request, user, db)
 
 
 @router.post("/agents/research")
@@ -206,13 +207,12 @@ def research_agent(
     user: CurrentUser = Depends(current_user),
     db: Session = Depends(get_db),
 ):
-    return _enqueue_agent("research", payload.model_dump(), RESEARCH_SYSTEM, background_tasks, request, user, db)
+    return _enqueue_agent("research", payload.model_dump(), background_tasks, request, user, db)
 
 
 def _enqueue_agent(
     agent_type: str,
     payload: dict,
-    system_prompt: str,
     background_tasks: BackgroundTasks,
     request: Request,
     user: CurrentUser,
@@ -237,31 +237,34 @@ def _enqueue_agent(
         entity_id=job.id,
         details={"async": True},
     )
-    background_tasks.add_task(
-        _run_agent_job,
-        job.id,
-        agent_type,
-        payload,
-        system_prompt,
-        user.tenant_id,
-        user.email,
-    )
+    if settings.uses_sqs_agent_queue:
+        try:
+            enqueue_agent_job(job.id)
+        except Exception as exc:
+            job.status = "failed"
+            job.error_message = "The agent queue is temporarily unavailable."
+            job.completed_at = datetime.now(UTC)
+            db.commit()
+            raise HTTPException(status_code=503, detail=job.error_message) from exc
+    else:
+        background_tasks.add_task(run_agent_job, job.id)
     return _serialize_job(db, job, include_result=False)
 
 
-def _run_agent_job(
-    job_id: str,
-    agent_type: str,
-    payload: dict,
-    system_prompt: str,
-    tenant_id: str,
-    actor_email: str,
-) -> None:
+def run_agent_job(job_id: str) -> None:
     db = SessionLocal()
+    job = None
     try:
         job = db.get(AgentJob, job_id)
         if not job:
             return
+        if job.status == "completed":
+            return
+        agent_type = job.agent_type
+        payload = job.request_payload
+        tenant_id = job.tenant_id
+        actor_email = job.created_by
+        system_prompt = TEACHING_SYSTEM if agent_type == "teaching" else RESEARCH_SYSTEM
         query = payload.get("topic") or payload.get("research_topic", "")
         contexts = retrieve_context(
             db,
@@ -314,6 +317,7 @@ def _run_agent_job(
             details={"model": model, "artifact_count": len(artifacts)},
         )
     except Exception as exc:
+        db.rollback()
         job = db.get(AgentJob, job_id)
         if not job:
             return
@@ -324,8 +328,8 @@ def _run_agent_job(
         audit(
             db,
             tenant_id=tenant_id,
-            actor_email=actor_email,
-            event_type=f"agent.{agent_type}.failed",
+            actor_email=job.created_by,
+            event_type=f"agent.{job.agent_type}.failed",
             status="failed",
             entity_type="job",
             entity_id=job.id,

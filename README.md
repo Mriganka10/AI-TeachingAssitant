@@ -79,6 +79,8 @@ Interactive API documentation is available at `/docs`.
 - Uploads enforce extension and size allow-lists. S3 server-side encryption is enabled, with
   optional KMS.
 - Jobs retain request/result/model/error metadata for operational traceability.
+- `AGENT_EXECUTION_BACKEND=sqs` moves long agent runs to a durable worker queue. Run the same
+  image with `SERVICE_MODE=worker`; the default `background` mode preserves local development.
 - Secrets belong in Elastic Beanstalk environment properties or AWS Secrets Manager, not Git.
 
 ## AWS deployment (Elastic Beanstalk → EC2 → S3)
@@ -100,6 +102,8 @@ AWS_REGION=ap-south-1
 AUTH_ENABLED=true
 OTP_DEV_MODE=false
 COOKIE_SECURE=true
+AGENT_EXECUTION_BACKEND=sqs
+AGENT_QUEUE_URL=<sqs-queue-url>
 SMTP_HOST=<smtp-host>
 SMTP_USERNAME=<smtp-user>
 SMTP_PASSWORD=<smtp-secret>

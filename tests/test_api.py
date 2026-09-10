@@ -175,3 +175,23 @@ def test_frontend_handles_non_json_api_responses() -> None:
     assert "HTML page instead of agent data" in script
     assert "waitForJob" in script
     assert "/api/jobs/" in script
+
+
+def test_sqs_backend_enqueues_existing_job_without_running_inline(monkeypatch) -> None:
+    queued: list[str] = []
+
+    monkeypatch.setattr(settings, "agent_execution_backend", "sqs")
+    monkeypatch.setattr(routes, "enqueue_agent_job", queued.append)
+
+    with TestClient(app) as client:
+        login(client)
+        response = client.post(
+            "/api/agents/teaching",
+            json={"topic": "Durable queues", "use_web_search": False},
+        )
+        job = client.get(f"/api/jobs/{response.json()['job_id']}")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "running"
+    assert queued == [response.json()["job_id"]]
+    assert job.json()["status"] == "running"

@@ -16,6 +16,10 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    # The original baseline revision used live model metadata. A database created
+    # from a newer checkout can therefore already contain this table.
+    if sa.inspect(op.get_bind()).has_table("email_verifications"):
+        return
     op.create_table(
         "email_verifications",
         sa.Column("id", sa.String(length=36), nullable=False),
@@ -33,6 +37,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    if not sa.inspect(op.get_bind()).has_table("email_verifications"):
+        return
     op.drop_index(op.f("ix_email_verifications_status"), table_name="email_verifications")
     op.drop_index(op.f("ix_email_verifications_email"), table_name="email_verifications")
     op.drop_table("email_verifications")
