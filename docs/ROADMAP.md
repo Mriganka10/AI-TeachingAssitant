@@ -13,8 +13,8 @@ Status: implemented.
 - SQLite/PostgreSQL persistence
 - local/S3 storage
 - audit tables
-- Docker and Elastic Beanstalk foundations
-- in-app asynchronous agent jobs with status polling
+- Docker and ECS web/worker deployment
+- durable SQS agent jobs with status polling, retries, and DLQ
 - first-time SES email verification followed by OTP login
 - 50 MB upload limit through app and Nginx
 - OCR configuration hooks for scanned PDFs
@@ -43,13 +43,11 @@ Status: implemented.
 
 ## Phase 4: Durable Background Processing
 
-The current release has in-process async jobs. This phase moves that behavior onto durable
-infrastructure for higher concurrency and better retry semantics.
+Status: core production path implemented in September 2026.
 
-- SQS job queue
-- worker service
-- progress and cancellation
-- retries and idempotency
+- SQS job queue and worker service (implemented)
+- retries, completed-job idempotency, and DLQ (implemented)
+- progress and cancellation (planned)
 - notification when work completes
 - large-batch paper ingestion
 
@@ -88,7 +86,7 @@ infrastructure for higher concurrency and better retry semantics.
 1. Add vector-backed, chunk-level retrieval.
 2. Enforce output schemas at model-call level.
 3. Add citation verification and visible provenance.
-4. Move in-process async jobs to SQS-backed durable workers.
+4. Add worker autoscaling alarms, progress reporting, and cancellation.
 5. Add Alembic migrations.
 6. Add OTP rate limiting and CSRF protection.
 7. Add professor-controlled deletion and retention.

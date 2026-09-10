@@ -39,7 +39,7 @@ Treat all uploaded and generated material as confidential unless explicitly clas
 ### Secrets
 
 - Never commit `.env`, OpenAI keys, SMTP passwords, database credentials, or application secrets.
-- Store secrets in AWS Secrets Manager, SSM Parameter Store, or protected EB properties.
+- Store secrets in AWS Secrets Manager or SSM Parameter Store and expose them only to the required ECS task role.
 - Use different values for `SECRET_KEY` and `OPENAI_API_KEY`.
 - Rotate any key exposed in Git, screenshots, logs, or chat.
 

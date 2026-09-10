@@ -1,178 +1,50 @@
-# AWS Deployment Guide
+# AWS Production Deployment
 
-## Target
+Last updated: 10 September 2026.
 
-```text
-Elastic Beanstalk -> EC2 -> FastAPI
-                         +-> RDS PostgreSQL
-                         +-> private S3
-                         +-> OpenAI API
-                         +-> Amazon SES / SMTP
-```
+## Live topology
 
-Recommended region for this project is `ap-south-1`, matching the application defaults. Choose a
-different region only after updating resource configuration consistently.
+`professoraihub.com` remains the public URL. CloudFront terminates HTTPS and forwards to the shared Application Load Balancer. A private origin header selects Professor AI's target group. Separate ECS services run the web and SQS worker processes on the shared ARM ECS capacity pool.
 
-## Required AWS Resources
+The application shares the physical ALB, ECS capacity, and RDS instance with the other products, but owns its target group, ECS services/task roles, secrets, queue/DLQ, logical PostgreSQL database and role, and S3 namespace. This is infrastructure consolidation, not cross-application data sharing.
 
-- Elastic Beanstalk application and environment
-- EC2 instance profile for Elastic Beanstalk
-- Private S3 bucket
-- RDS PostgreSQL instance
-- Security groups connecting EB EC2 to RDS
-- Amazon SES sender/domain identity or SMTP credentials
-- CloudWatch logs and alarms
-- ACM certificate and load balancer for HTTPS
-
-## Production Environment Variables
+## Required runtime configuration
 
 ```text
-APP_NAME=Professor AI Workspace
 ENVIRONMENT=production
-SECRET_KEY=<long-random-application-secret>
-DATABASE_URL=postgresql+psycopg://user:password@host:5432/professor_ai
-OPENAI_API_KEY=<openai-key>
-OPENAI_MODEL=gpt-5.5
-OPENAI_REASONING_EFFORT=medium
-LLM_SERVICE_MODE=openai
-AUTH_ENABLED=true
-OTP_DEV_MODE=false
-OTP_TTL_MINUTES=10
-SESSION_TTL_MINUTES=720
-COOKIE_SECURE=true
-EMAIL_PROVIDER=ses
-SES_REGION=ap-south-1
-SES_FROM=<verified-sender>
-SMTP_HOST=<smtp-host>
-SMTP_PORT=587
-SMTP_USERNAME=<smtp-user>
-SMTP_PASSWORD=<smtp-password>
-SMTP_FROM=<verified-sender>
+DATABASE_URL=postgresql+psycopg://<app-role>:<secret>@<shared-rds>/<app-db>
 STORAGE_PROVIDER=s3
 S3_BUCKET=<private-bucket>
-S3_PREFIX=professor-ai
-S3_KMS_KEY_ID=<optional-kms-key>
 AWS_REGION=ap-south-1
-MAX_UPLOAD_MB=50
-MAX_CONTEXT_CHARS=120000
-DATABASE_POOL_SIZE=5
-DATABASE_MAX_OVERFLOW=10
-DATABASE_POOL_RECYCLE_SECONDS=1800
-DATABASE_CONNECT_TIMEOUT_SECONDS=10
-OCR_ENABLED=true
-OCR_PROVIDER=textract
-OCR_MIN_TEXT_CHARS=80
-OCR_MAX_PAGES=100
-OCR_DPI=200
+AGENT_EXECUTION_BACKEND=sqs
+AGENT_QUEUE_URL=<queue-url>
+AGENT_QUEUE_WAIT_SECONDS=20
+AGENT_QUEUE_VISIBILITY_SECONDS=900
+AUTH_ENABLED=true
+OTP_DEV_MODE=false
+COOKIE_SECURE=true
 ```
 
-## S3 Layout
+Configure model, SMTP/SES, OCR, session, and encryption settings through Secrets Manager/SSM and the task definition. Never store secret values in Git or documentation.
 
-```text
-professor-ai/
-  tenants/
-    {tenant_id}/
-      rag/{document_id}/{filename}
-      artifacts/{artifact_id}/{filename}
-```
+The task role requires `ses:GetEmailIdentity`, `ses:CreateEmailIdentity`, `ses:SendEmail`, and
+`ses:SendRawEmail` for first-time verification and OTP delivery. Missing identity permissions
+causes registration HTTP 503 even when ordinary SES sending works.
 
-Enable:
+## Image, data, and release
 
-- block public access
-- bucket versioning
-- default encryption
-- lifecycle expiration where institutionally appropriate
-- access logging or CloudTrail data events for higher-assurance deployments
+Build one immutable ARM-compatible image. The web task uses the default command; the worker task sets `SERVICE_MODE=worker`. Deploy the same image digest to both. The web receives ALB traffic; the worker has no public listener. Scale web tasks from request/CPU pressure and workers from queue depth or oldest-message age. Repeated failures go to the DLQ.
 
-## IAM
+The application connects only with its own database role. RDS has seven-day automated backups and deletion protection. S3 remains private, encrypted, and tenant-prefixed.
 
-The EB EC2 role needs only:
+1. Run lint/tests; record the source commit and image digest.
+2. Back up the database and verify queue/DLQ state.
+3. Register new worker and web task-definition revisions.
+4. Apply backward-compatible migrations once.
+5. Update worker, then web; wait for ECS stability.
+6. Verify `/health`, OTP login, upload, both agents, polling, and downloads.
+7. Watch ALB 5xx, task restarts, queue age/DLQ, RDS, and logs.
 
-- `s3:GetObject`
-- `s3:PutObject`
-- optionally `s3:DeleteObject`
-- `kms:Encrypt`, `kms:Decrypt`, and `kms:GenerateDataKey` when using KMS
-- `textract:DetectDocumentText` when `OCR_PROVIDER=textract`
-- `ses:SendEmail`, `ses:GetEmailIdentity`, and `ses:CreateEmailIdentity` when
-  `EMAIL_PROVIDER=ses` and first-time email verification is enabled through SES
+Rollback uses preceding task definitions and, only if schema compatibility requires it, the database restore plan. The former Elastic Beanstalk environment is paused—not active—and should remain only for the agreed 7–14 day rollback window.
 
-Scope permissions to the application bucket and prefix.
-
-## RDS
-
-Use PostgreSQL and a URL in SQLAlchemy psycopg form:
-
-```text
-postgresql+psycopg://user:password@host:5432/professor_ai
-```
-
-RDS should:
-
-- be private
-- accept port 5432 only from the EB EC2 security group
-- use encryption at rest
-- have automated backups
-- use a secret-managed password
-
-## Elastic Beanstalk
-
-The repository includes:
-
-- `Procfile`
-- `Dockerfile`
-- `.ebextensions/01_options.config`
-- Alembic migrations in `migrations/`
-
-Example EB CLI flow:
-
-```bash
-eb init professor-ai --platform python --region ap-south-1
-eb create professor-ai-prod
-eb setenv ENVIRONMENT=production AUTH_ENABLED=true OTP_DEV_MODE=false \
-  COOKIE_SECURE=true STORAGE_PROVIDER=s3
-eb deploy
-eb status
-eb open
-```
-
-Set secret values separately and avoid shell history exposure.
-
-## HTTPS
-
-For production:
-
-1. create or validate an ACM certificate
-2. use a load-balanced EB environment
-3. attach the certificate to the HTTPS listener
-4. redirect HTTP to HTTPS
-5. set `COOKIE_SECURE=true`
-
-Do not enable secure cookies on a plain HTTP-only environment during initial testing; browsers will
-not return them.
-
-## Health and Verification
-
-```bash
-curl https://<domain>/health
-```
-
-Then verify:
-
-1. OTP email delivery
-2. session cookie behavior
-3. document upload to S3
-4. document metadata in RDS
-5. both agent runs enqueue quickly and complete through `GET /api/jobs/{job_id}`
-6. JSON, DOCX, PDF, and PPTX artifact download after instance replacement
-7. audit-event rows
-8. scanned-PDF ingestion through Textract
-9. CloudWatch application logs
-
-## Production Limitations
-
-- SQLite must not be used across multiple instances.
-- Local EC2 disk is temporary and must not be the source of record.
-- Current async jobs run in-process. They avoid browser/proxy timeouts, but a container restart can
-  interrupt active work.
-- Apply and review Alembic migrations before every production release.
-- Introduce SQS/Celery/RQ workers before heavy or multi-user usage.
+See [deployment walkthrough](AWS_DEPLOYMENT_WALKTHROUGH.md), [operations](OPERATIONS_RUNBOOK.md), and [code walkthrough](CODE_WALKTHROUGH.md).

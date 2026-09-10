@@ -12,6 +12,7 @@ A deployable, multi-tenant baseline for two professor-facing agents:
 
 - [Project brief](docs/PROJECT_BRIEF.md)
 - [Architecture](docs/ARCHITECTURE.md)
+- [Code walkthrough](docs/CODE_WALKTHROUGH.md)
 - [Agent workflows](docs/AGENTS.md)
 - [Models and techniques](docs/MODELS_AND_AGENTS.md)
 - [RAG design](docs/RAG_DESIGN.md)
@@ -32,11 +33,11 @@ A deployable, multi-tenant baseline for two professor-facing agents:
 Browser
   │ email + OTP / HTTPS
   ▼
-CloudFront + Elastic Beanstalk (nginx + FastAPI)
-  ├── EC2 application instances
-  ├── PostgreSQL/RDS: users, OTPs, sessions, jobs, documents, artifacts, audit events
-  ├── S3: tenant-isolated uploads, RAG sources, generated PPTX/PDF/DOCX/JSON
-  └── OpenAI Responses API: GPT-5.5 + optional web search
+CloudFront -> shared ALB -> isolated ECS web service
+  ├── SQS -> isolated ECS worker service
+  ├── shared RDS instance / dedicated logical database and role
+  ├── S3: tenant-isolated uploads, RAG sources, generated artifacts
+  └── OpenAI Responses API: configured model + optional web search
 ```
 
 The local profile uses SQLite and local disk. Production switches to PostgreSQL and S3 using
@@ -81,14 +82,15 @@ Interactive API documentation is available at `/docs`.
 - Jobs retain request/result/model/error metadata for operational traceability.
 - `AGENT_EXECUTION_BACKEND=sqs` moves long agent runs to a durable worker queue. Run the same
   image with `SERVICE_MODE=worker`; the default `background` mode preserves local development.
-- Secrets belong in Elastic Beanstalk environment properties or AWS Secrets Manager, not Git.
+- Secrets belong in AWS Secrets Manager/SSM and ECS task configuration, not Git.
 
-## AWS deployment (Elastic Beanstalk → EC2 → S3)
+## AWS production deployment
 
 1. Create an S3 bucket with public access blocked, versioning, lifecycle rules, and encryption.
 2. Create PostgreSQL in RDS (recommended for production). Set `DATABASE_URL` to the psycopg URL.
-3. Give the EB instance profile least-privilege access to the configured S3 prefix and KMS key.
-4. Create an EB Python or Docker environment and configure:
+3. Give the application task roles least-privilege access to the configured S3 prefix, SQS queue,
+   secrets, and KMS key.
+4. Run the image as separate ECS web and worker services behind the shared ALB:
 
 ```text
 ENVIRONMENT=production
@@ -110,8 +112,10 @@ SMTP_PASSWORD=<smtp-secret>
 SMTP_FROM=<verified-sender>
 ```
 
-5. Configure an HTTPS ACM certificate on the load balancer and redirect HTTP to HTTPS.
-6. Deploy with `eb init`, `eb create`, and `eb deploy`, or upload a source bundle.
+5. Keep TLS and the public domain on CloudFront; route to the application's ALB target group by
+   the private origin header.
+6. Deploy a new immutable image, update task definitions, wait for service stability, and run the
+   smoke checks in the deployment walkthrough.
 
 For a quick prototype without RDS, SQLite runs on one EC2 instance, but it is not safe for
 autoscaling or instance replacement.
@@ -125,10 +129,9 @@ pytest
 
 ## Current production behavior and boundaries
 
-- Agent execution uses an in-app asynchronous job flow: API calls enqueue work quickly, the UI
-  polls job status, and completed jobs expose JSON, DOCX, PDF, and PPTX artifacts.
-- For high concurrency, move the current in-process background task execution to SQS/Celery/RQ or
-  an Elastic Beanstalk worker tier.
+- Production agent execution uses SQS and a separate worker service: API calls enqueue work
+  quickly, the UI polls job status, and completed jobs expose JSON, DOCX, PDF, and PPTX artifacts.
+- Local development keeps the `background` backend so developers do not need AWS services.
 - Retrieval currently ranks up to 250 tenant documents lexically and sends bounded excerpts.
   For large corpora, add OpenAI vector stores, pgvector, or Qdrant while retaining S3 as the
   source-of-record.

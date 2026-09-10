@@ -21,6 +21,7 @@ This guide helps the owner review, demonstrate, deploy, and assign future work f
 13. `docs/OPERATIONS_RUNBOOK.md` — support and incidents
 14. `docs/TESTING_AND_QA.md` — release validation
 15. `docs/ROADMAP.md` — next phases
+16. `docs/CODE_WALKTHROUGH.md` — code entry points and durable job flow
 
 ## Technical-Team Summary
 
@@ -80,11 +81,11 @@ Open `http://127.0.0.1:8000`.
 - approved OpenAI model and budget
 - whether current web search is allowed
 - research-paper license and privacy constraints
-- whether to keep in-process async jobs or move to SQS workers for scale
+- queue/worker autoscaling thresholds and per-tenant usage budgets
 
 ## Current Production Gaps
 
-- in-process async execution should move to durable SQS workers before high-concurrency use
+- worker autoscaling and queue-age alarms should be tuned from observed production load
 - lexical rather than vector retrieval
 - no citation verification
 - OCR requires local Tesseract or Amazon Textract configuration and operational validation
@@ -98,7 +99,7 @@ Open `http://127.0.0.1:8000`.
 1. Rotate and centralize all secrets.
 2. Create dev/stage/prod environments.
 3. Add Alembic.
-4. Move async jobs to SQS-backed workers.
+4. Add queue-depth autoscaling and operational dashboards.
 5. Add vector retrieval and citation provenance.
 6. Add CSRF, rate limiting, and domain allow-list.
 7. Run security, privacy, and academic-integrity review.
