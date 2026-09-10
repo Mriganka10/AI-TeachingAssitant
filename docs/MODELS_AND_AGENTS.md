@@ -42,7 +42,8 @@ unstructured output.
 
 ## Execution Pattern
 
-Agent requests are queued as `AgentJob` rows and executed in application background tasks. The API
+Agent requests are queued as `AgentJob` rows and executed by the SQS-backed ECS worker in
+production. The local profile can execute them as FastAPI background tasks. The API
 returns a `job_id` immediately; the UI polls `GET /api/jobs/{job_id}` until structured output and
 downloadable artifacts are ready. This keeps long OpenAI and document-generation work away from
 the original browser request.

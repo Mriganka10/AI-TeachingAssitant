@@ -43,4 +43,7 @@ Last updated: 10 September 2026. This walkthrough describes the code currently d
 
 ## Verification
 
-Run `ruff check .` and `pytest`. The migration release passed 15 tests, followed by production health and end-to-end smoke checks.
+Run `pytest` and `ruff check .`. On 10 September 2026, all 15 tests passed. The repository-wide
+Ruff audit still reports 28 pre-existing findings (primarily FastAPI dependency defaults, broad
+exception handling, and migration import/style rules); do not describe lint as clean until those
+are resolved in a dedicated code-quality change.

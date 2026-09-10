@@ -130,7 +130,7 @@ Both agents use:
 4. `create_artifacts` for export.
 5. `StorageService` for local/S3 persistence.
 6. `AuditEvent` for success and failure traceability.
-7. FastAPI background tasks for the current in-app asynchronous execution model.
+7. SQS-backed ECS workers in production, with FastAPI background tasks only for local development.
 
 ## Failure Behavior
 

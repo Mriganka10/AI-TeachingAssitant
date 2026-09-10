@@ -47,4 +47,8 @@ The application connects only with its own database role. RDS has seven-day auto
 
 Rollback uses preceding task definitions and, only if schema compatibility requires it, the database restore plan. The former Elastic Beanstalk environment is paused—not active—and should remain only for the agreed 7–14 day rollback window.
 
+The former per-application RDS instance still exists during that rollback window and continues to
+incur charges. After final row-count/restore validation and owner approval, snapshot and retire it;
+do not delete it as part of an ordinary application deployment.
+
 See [deployment walkthrough](AWS_DEPLOYMENT_WALKTHROUGH.md), [operations](OPERATIONS_RUNBOOK.md), and [code walkthrough](CODE_WALKTHROUGH.md).
