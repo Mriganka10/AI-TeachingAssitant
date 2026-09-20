@@ -132,7 +132,8 @@ pytest
 - Production agent execution uses SQS and a separate worker service: API calls enqueue work
   quickly, the UI polls job status, and completed jobs expose JSON, DOCX, PDF, and PPTX artifacts.
 - Local development keeps the `background` backend so developers do not need AWS services.
-- Retrieval currently ranks up to 250 tenant documents lexically and sends bounded excerpts.
+- Retrieval currently chunks up to 250 tenant documents, ranks excerpts with TF-IDF (with a lexical
+  fallback), limits per-document dominance, and sends bounded source-labelled context.
   For large corpora, add OpenAI vector stores, pgvector, or Qdrant while retaining S3 as the
   source-of-record.
 - Production OTP and first-time email verification use Amazon SES/SMTP configuration; development

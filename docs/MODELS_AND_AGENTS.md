@@ -19,7 +19,7 @@ system prompts, input schemas, selected source collections, and output requireme
 | Teaching generation | OpenAI Responses API | Generate structured teaching package. |
 | Research synthesis | OpenAI Responses API | Generate structured research analysis. |
 | Current public research | OpenAI `web_search` tool | Supplement uploaded sources when enabled. |
-| Local retrieval | Token-frequency lexical ranking | Select bounded tenant document excerpts. |
+| Local retrieval | Chunk-level TF-IDF ranking with a lexical fallback | Select the most relevant bounded tenant document excerpts. |
 | PDF extraction | `pypdf` + optional OCR | Extract text PDFs and scanned PDFs when OCR is configured. |
 | DOCX extraction | `python-docx` | Extract document paragraphs. |
 | PPTX generation | `python-pptx` | Build teaching and research presentation decks. |
@@ -36,9 +36,13 @@ system prompts, input schemas, selected source collections, and output requireme
 - retrieved uploaded context
 - optional `web_search`
 - reasoning effort for GPT-5-family models
+- a strict agent-specific JSON Schema through Responses API structured outputs
+- explicit output verbosity and a bounded output-token budget
 
-The service expects one valid JSON object and rejects invalid JSON rather than silently accepting
-unstructured output.
+The service validates the returned object semantically as well as structurally. It checks lesson
+timing, assessment-to-objective links, rubric totals, source identifiers, and evidence for research
+gaps. A failed validation receives one bounded repair attempt; an invalid result is never silently
+accepted.
 
 ## Execution Pattern
 
@@ -86,7 +90,6 @@ The current prompts:
 
 Production quality controls should add:
 
-- JSON Schema or structured-output enforcement
 - citation URL and DOI verification
 - prompt and model version recording
 - output evaluation datasets

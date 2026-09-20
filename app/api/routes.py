@@ -265,7 +265,15 @@ def run_agent_job(job_id: str) -> None:
         tenant_id = job.tenant_id
         actor_email = job.created_by
         system_prompt = TEACHING_SYSTEM if agent_type == "teaching" else RESEARCH_SYSTEM
-        query = payload.get("topic") or payload.get("research_topic", "")
+        query = " ".join(
+            str(value)
+            for value in (
+                payload.get("topic") or payload.get("research_topic", ""),
+                payload.get("course") or payload.get("discipline", ""),
+                payload.get("instructions", ""),
+            )
+            if value
+        )
         contexts = retrieve_context(
             db,
             tenant_id=tenant_id,
@@ -274,6 +282,7 @@ def run_agent_job(job_id: str) -> None:
         )
         model_payload = {**payload, "uploaded_context": contexts}
         result, model = llm.generate(
+            agent_type=agent_type,
             system=system_prompt,
             payload=model_payload,
             use_web_search=payload.get("use_web_search", False),

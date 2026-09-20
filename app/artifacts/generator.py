@@ -12,7 +12,7 @@ from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 from pptx import Presentation
 from pptx.dml.color import RGBColor as PptxRGBColor
-from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
+from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.util import Inches as PptxInches
 from pptx.util import Pt as PptxPt
 from reportlab.lib import colors
@@ -148,6 +148,22 @@ def _set_cell_margins(cell, top: int = 90, start: int = 120, bottom: int = 90, e
         node.set(qn("w:type"), "dxa")
 
 
+def _set_table_borders(table) -> None:
+    table_properties = table._tbl.tblPr
+    borders = table_properties.find(qn("w:tblBorders"))
+    if borders is None:
+        borders = OxmlElement("w:tblBorders")
+        table_properties.append(borders)
+    for edge in ("top", "left", "bottom", "right", "insideH", "insideV"):
+        element = borders.find(qn(f"w:{edge}"))
+        if element is None:
+            element = OxmlElement(f"w:{edge}")
+            borders.append(element)
+        element.set(qn("w:val"), "single")
+        element.set(qn("w:sz"), "4")
+        element.set(qn("w:color"), "D9D9D9")
+
+
 def _add_page_number(paragraph) -> None:
     paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     run = paragraph.add_run("Page ")
@@ -183,11 +199,11 @@ def _configure_docx(doc: Document, title: str, agent_type: str) -> None:
     normal.paragraph_format.line_spacing = 1.15
 
     for style_name, size, color, before, after in (
-        ("Title", 26, NAVY, 0, 8),
-        ("Subtitle", 12, MUTED, 0, 18),
-        ("Heading 1", 17, BLUE, 18, 8),
-        ("Heading 2", 13.5, NAVY, 13, 6),
-        ("Heading 3", 11.5, PURPLE if agent_type == "research" else CYAN, 9, 4),
+        ("Title", 26, "000000", 0, 8),
+        ("Subtitle", 12, "000000", 0, 18),
+        ("Heading 1", 17, "000000", 18, 8),
+        ("Heading 2", 13.5, "000000", 13, 6),
+        ("Heading 3", 11.5, "000000", 9, 4),
     ):
         style = doc.styles[style_name]
         style.font.name = "Arial"
@@ -201,7 +217,7 @@ def _configure_docx(doc: Document, title: str, agent_type: str) -> None:
         style.paragraph_format.keep_with_next = True
 
     header = section.header.paragraphs[0]
-    header.text = "PROFESSOR AI  |  " + (
+    header.text = "PROFESSOR AI - " + (
         "TEACHING PACKAGE" if agent_type == "teaching" else "RESEARCH SYNTHESIS"
     )
     _set_docx_font(header.runs[0], size=8.5, color=MUTED, bold=True)
@@ -231,27 +247,19 @@ def _add_docx_cover(doc: Document, result: dict, agent_type: str) -> None:
     title_p.add_run(title)
     subtitle = doc.add_paragraph(style="Subtitle")
     subtitle.add_run(
-        "Professor review edition  |  Generated "
-        + datetime.now(UTC).strftime("%d %B %Y")
+        "Professor review edition - Generated " + datetime.now(UTC).strftime("%d %B %Y")
     )
 
-    notice = doc.add_table(rows=1, cols=1)
-    notice.alignment = WD_TABLE_ALIGNMENT.LEFT
-    notice.autofit = False
-    notice.columns[0].width = Inches(6.7)
-    cell = notice.cell(0, 0)
-    _shade_cell(cell, "EAF2FB")
-    _set_cell_margins(cell, top=120, bottom=120, start=160, end=160)
-    p = cell.paragraphs[0]
-    p.paragraph_format.space_after = Pt(0)
-    label = p.add_run("FACULTY REVIEW NOTE  ")
-    _set_docx_font(label, size=9, color=BLUE, bold=True)
+    p = doc.add_paragraph()
+    p.paragraph_format.space_before = Pt(8)
+    p.paragraph_format.space_after = Pt(12)
+    label = p.add_run("Faculty review note: ")
+    _set_docx_font(label, size=9.5, color="000000", bold=True)
     body = p.add_run(
         "This is AI-assisted draft material. Verify facts, citations, calculations, "
         "assessment suitability, and institutional policy before classroom or publication use."
     )
-    _set_docx_font(body, size=9, color=INK)
-    doc.add_paragraph().paragraph_format.space_after = Pt(2)
+    _set_docx_font(body, size=9.5, color=INK)
 
 
 def _add_docx_bullet(doc: Document, text: Any, *, level: int = 0) -> None:
@@ -278,23 +286,7 @@ def _add_docx_labelled(doc: Document, label: str, value: Any) -> None:
 
 
 def _add_docx_callout(doc: Document, label: str, value: Any, fill: str = LIGHT) -> None:
-    text = _plain_text(value)
-    if not text:
-        return
-    table = doc.add_table(rows=1, cols=1)
-    table.alignment = WD_TABLE_ALIGNMENT.LEFT
-    table.autofit = False
-    table.columns[0].width = Inches(6.7)
-    cell = table.cell(0, 0)
-    _shade_cell(cell, fill)
-    _set_cell_margins(cell, top=120, bottom=120, start=150, end=150)
-    p = cell.paragraphs[0]
-    p.paragraph_format.space_after = Pt(0)
-    label_run = p.add_run(f"{label.upper()}\n")
-    _set_docx_font(label_run, size=8.5, color=BLUE, bold=True)
-    body = p.add_run(text)
-    _set_docx_font(body, size=10, color=INK)
-    doc.add_paragraph().paragraph_format.space_after = Pt(0)
+    _add_docx_labelled(doc, label, value)
 
 
 def _add_docx_table(doc: Document, headers: list[str], rows: list[list[Any]], widths: list[float]):
@@ -303,6 +295,8 @@ def _add_docx_table(doc: Document, headers: list[str], rows: list[list[Any]], wi
     table = doc.add_table(rows=1, cols=len(headers))
     table.alignment = WD_TABLE_ALIGNMENT.LEFT
     table.autofit = False
+    _set_table_borders(table)
+    table.rows[0]._tr.get_or_add_trPr().append(OxmlElement("w:tblHeader"))
     for index, width in enumerate(widths):
         table.columns[index].width = Inches(width)
     header_cells = table.rows[0].cells
@@ -439,6 +433,7 @@ def _render_teaching_docx(doc: Document, result: dict) -> None:
         _add_docx_callout(doc, "Teaching notes", case_study.get("teaching_notes"), "F3F0FB")
 
     _render_sources_docx(doc, result)
+    _render_quality_notes_docx(doc, result)
 
 
 def _render_teaching_section_docx(doc: Document, content: Any) -> None:
@@ -446,6 +441,7 @@ def _render_teaching_section_docx(doc: Document, content: Any) -> None:
         for item in _as_list(content):
             _add_docx_bullet(doc, item)
         return
+    _add_docx_labelled(doc, "Explanation", content.get("explanation"))
     key_points = _as_list(content.get("key_points"))
     if key_points:
         doc.add_heading("Key Points", level=3)
@@ -524,7 +520,11 @@ def _render_teaching_assessment_docx(doc: Document, result: dict) -> None:
             if isinstance(item, dict):
                 doc.add_heading(f"Problem {index}", level=3)
                 _add_docx_labelled(doc, "Question", item.get("problem"))
-                _add_docx_callout(doc, "Solution", item.get("solution"), "EAF6F0")
+                if item.get("given"):
+                    _add_docx_labelled(doc, "Given", item.get("given"))
+                steps = item.get("solution_steps") or item.get("solution")
+                _add_docx_labelled(doc, "Solution steps", steps)
+                _add_docx_labelled(doc, "Final answer", item.get("final_answer"))
             else:
                 _add_docx_number(doc, item)
 
@@ -534,11 +534,30 @@ def _render_teaching_assessment_docx(doc: Document, result: dict) -> None:
             if isinstance(item, dict):
                 doc.add_heading(_plain_text(item.get("title"), "Assignment"), level=3)
                 _add_docx_callout(doc, "Brief", item.get("prompt"), "EEF3FA")
+                deliverables = _as_list(item.get("deliverables"))
+                if deliverables:
+                    doc.add_paragraph("Deliverables", style="Heading 3")
+                    for deliverable in deliverables:
+                        _add_docx_bullet(doc, deliverable)
                 rubric = _as_list(item.get("rubric"))
                 if rubric:
-                    doc.add_paragraph("Assessment criteria:", style="Heading 3")
+                    rows = []
                     for criterion in rubric:
-                        _add_docx_bullet(doc, criterion)
+                        if isinstance(criterion, dict):
+                            rows.append([
+                                criterion.get("criterion"),
+                                f"{criterion.get('weight_percent', '')}%",
+                                criterion.get("description"),
+                            ])
+                        else:
+                            rows.append([criterion, "", ""])
+                    doc.add_paragraph("Assessment criteria", style="Heading 3")
+                    _add_docx_table(
+                        doc,
+                        ["Criterion", "Weight", "Performance description"],
+                        rows,
+                        [1.6, 0.8, 4.3],
+                    )
             else:
                 _add_docx_bullet(doc, item)
 
@@ -546,11 +565,16 @@ def _render_teaching_assessment_docx(doc: Document, result: dict) -> None:
         rows = []
         for item in bloom:
             if isinstance(item, dict):
-                rows.append([item.get("objective"), item.get("level")])
+                rows.append([item.get("objective"), item.get("level"), item.get("assessment")])
             else:
-                rows.append([item, ""])
+                rows.append([item, "", ""])
         doc.add_heading("Bloom's Taxonomy Mapping", level=2)
-        _add_docx_table(doc, ["Learning Objective", "Bloom Level"], rows, [5.15, 1.55])
+        _add_docx_table(
+            doc,
+            ["Learning Objective", "Bloom Level", "Assessment"],
+            rows,
+            [2.5, 1.2, 3.0],
+        )
 
     if discussion:
         doc.add_heading("Discussion Questions", level=2)
@@ -569,11 +593,19 @@ def _render_teaching_assessment_docx(doc: Document, result: dict) -> None:
 
 
 def _render_research_docx(doc: Document, result: dict) -> None:
+    scope = result.get("scope") if isinstance(result.get("scope"), dict) else {}
+    if scope:
+        doc.add_heading("Research Scope", level=1)
+        _add_docx_labelled(doc, "Discipline", scope.get("discipline"))
+        _add_docx_labelled(doc, "Problem statement", scope.get("problem_statement"))
+        _add_docx_labelled(doc, "Included", scope.get("inclusion_boundaries"))
+        _add_docx_labelled(doc, "Excluded", scope.get("exclusion_boundaries"))
     summary = result.get("executive_summary")
     doc.add_heading("Executive Summary", level=1)
     if isinstance(summary, dict):
         _add_docx_callout(doc, "Evidence", summary.get("evidence"), "EEF3FA")
         _add_docx_callout(doc, "Interpretation", summary.get("inference"), "F3F0FB")
+        _add_docx_labelled(doc, "Limitations", summary.get("limitations"))
     else:
         doc.add_paragraph(_plain_text(summary))
 
@@ -586,6 +618,11 @@ def _render_research_docx(doc: Document, result: dict) -> None:
                 doc.add_paragraph(_plain_text(item))
                 continue
             doc.add_heading(f"{index}. {_plain_text(item.get('theme'), 'Theme')}", level=2)
+            evidence_items = _as_list(item.get("evidence"))
+            if evidence_items:
+                doc.add_heading("Evidence", level=3)
+                for evidence in evidence_items:
+                    _add_docx_bullet(doc, evidence)
             synthesis = item.get("synthesis")
             if isinstance(synthesis, dict):
                 _add_docx_labelled(doc, "Evidence", synthesis.get("evidence"))
@@ -609,7 +646,8 @@ def _render_research_docx(doc: Document, result: dict) -> None:
             doc.add_heading(f"{index}. {_plain_text(item.get('method'), 'Method')}", level=2)
             _add_docx_labelled(doc, "Strengths", item.get("strengths"))
             _add_docx_labelled(doc, "Limitations", item.get("limitations"))
-            papers = _as_list(item.get("papers"))
+            _add_docx_labelled(doc, "Suitability", item.get("suitability"))
+            papers = _as_list(item.get("studies") or item.get("papers"))
             if papers:
                 _add_docx_labelled(doc, "Representative studies", "; ".join(map(_plain_text, papers)))
 
@@ -621,6 +659,7 @@ def _render_research_docx(doc: Document, result: dict) -> None:
                 doc.add_heading(f"{index}. {_plain_text(item.get('gap'), 'Research gap')}", level=2)
                 _add_docx_callout(doc, "Evidence for the gap", item.get("evidence"), "EEF3FA")
                 _add_docx_callout(doc, "Research implication", item.get("inference"), "F3F0FB")
+                _add_docx_labelled(doc, "Confidence", item.get("confidence"))
             else:
                 _add_docx_number(doc, item)
 
@@ -628,7 +667,14 @@ def _render_research_docx(doc: Document, result: dict) -> None:
     if questions:
         doc.add_heading("Proposed Research Questions", level=1)
         for question in questions:
-            _add_docx_number(doc, question)
+            if isinstance(question, dict):
+                _add_docx_number(doc, question.get("question"))
+                _add_docx_labelled(doc, "Rationale", question.get("rationale"))
+                _add_docx_labelled(
+                    doc, "Key variables or constructs", question.get("key_variables_or_constructs")
+                )
+            else:
+                _add_docx_number(doc, question)
 
     future = _as_list(result.get("future_scope"))
     if future:
@@ -650,6 +696,8 @@ def _render_research_docx(doc: Document, result: dict) -> None:
                     f"{index}. {_plain_text(item.get('suggestion'), 'Recommendation')}", level=2
                 )
                 _add_docx_labelled(doc, "Rationale", item.get("rationale"))
+                _add_docx_labelled(doc, "Data collection", item.get("data_collection"))
+                _add_docx_labelled(doc, "Analysis", item.get("analysis"))
             else:
                 _add_docx_number(doc, item)
 
@@ -665,6 +713,7 @@ def _render_research_docx(doc: Document, result: dict) -> None:
             p.add_run(_plain_text(reference))
 
     _render_sources_docx(doc, result)
+    _render_quality_notes_docx(doc, result)
 
 
 def _render_sources_docx(doc: Document, result: dict) -> None:
@@ -689,6 +738,23 @@ def _render_sources_docx(doc: Document, result: dict) -> None:
         doc.add_heading("Evidence Base Named in the Teaching Plan", level=2)
         for item in _as_list(evidence):
             _add_docx_bullet(doc, item)
+
+
+def _render_quality_notes_docx(doc: Document, result: dict) -> None:
+    notes = result.get("quality_notes")
+    if not isinstance(notes, dict):
+        return
+    doc.add_heading("Professor Review Checklist", level=1)
+    for heading, key in (
+        ("Limitations", "limitations"),
+        ("Unverified Claims", "unverified_claims"),
+        ("Review Priorities", "review_priorities"),
+    ):
+        values = _as_list(notes.get(key))
+        if values:
+            doc.add_heading(heading, level=2)
+            for value in values:
+                _add_docx_bullet(doc, value)
 
 
 # ---------------------------------------------------------------------------
@@ -724,7 +790,7 @@ def _pdf_styles():
             fontName="Helvetica-Bold",
             fontSize=15,
             leading=18,
-            textColor=colors.HexColor(f"#{BLUE}"),
+            textColor=colors.black,
             spaceBefore=14,
             spaceAfter=7,
         ),
@@ -734,7 +800,7 @@ def _pdf_styles():
             fontName="Helvetica-Bold",
             fontSize=11.5,
             leading=14,
-            textColor=colors.HexColor(f"#{NAVY}"),
+            textColor=colors.black,
             spaceBefore=10,
             spaceAfter=5,
         ),
@@ -744,7 +810,7 @@ def _pdf_styles():
             fontName="Helvetica-Bold",
             fontSize=10,
             leading=12,
-            textColor=colors.HexColor(f"#{PURPLE}"),
+            textColor=colors.black,
             spaceBefore=7,
             spaceAfter=4,
         ),
@@ -800,24 +866,12 @@ def _pdf_callout(story: list, label: str, value: Any, styles, fill: str = "F3F6F
     text = _plain_text(value)
     if not text:
         return
-    content = Paragraph(
-        f"<b>{escape(label.upper())}</b><br/>{escape(text).replace(chr(10), '<br/>')}",
-        styles["callout"],
-    )
-    table = Table([[content]], colWidths=[6.7 * inch], hAlign="LEFT")
-    table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor(f"#{fill}")),
-                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor(f"#{LINE}")),
-                ("LEFTPADDING", (0, 0), (-1, -1), 10),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 10),
-                ("TOPPADDING", (0, 0), (-1, -1), 8),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-            ]
+    story.append(
+        Paragraph(
+            f"<b>{escape(label)}:</b> {escape(text).replace(chr(10), '<br/>')}",
+            styles["body"],
         )
     )
-    story.extend([table, Spacer(1, 7)])
 
 
 def _pdf_table(story: list, headers: list[str], rows: list[list[Any]], widths: list[float], styles):
@@ -849,12 +903,9 @@ def _pdf_table(story: list, headers: list[str], rows: list[list[Any]], widths: l
 def _pdf_page(canvas, doc, agent_type: str):
     canvas.saveState()
     width, height = LETTER
-    canvas.setStrokeColor(colors.HexColor(f"#{LINE}"))
-    canvas.setLineWidth(0.5)
-    canvas.line(0.82 * inch, height - 0.46 * inch, width - 0.82 * inch, height - 0.46 * inch)
     canvas.setFont("Helvetica-Bold", 7.5)
     canvas.setFillColor(colors.HexColor(f"#{MUTED}"))
-    label = "PROFESSOR AI  |  " + (
+    label = "PROFESSOR AI - " + (
         "TEACHING PACKAGE" if agent_type == "teaching" else "RESEARCH SYNTHESIS"
     )
     canvas.drawString(0.82 * inch, height - 0.35 * inch, label)
@@ -870,7 +921,7 @@ def _create_pdf(result: dict, path: Path, agent_type: str) -> Path:
         Spacer(1, 0.2 * inch),
         _pdf_paragraph(title, styles["title"]),
         _pdf_paragraph(
-            "Professor review edition  |  AI-assisted draft  |  "
+            "Professor review edition - AI-assisted draft - "
             + datetime.now(UTC).strftime("%d %B %Y"),
             styles["subtitle"],
         ),
@@ -958,7 +1009,7 @@ def _render_teaching_pdf(story: list, result: dict, styles) -> None:
                 continue
             story.append(_pdf_paragraph(
                 _plain_text(section.get("title"))
-                + (f"  |  {section.get('minutes')} minutes" if section.get("minutes") else ""),
+                + (f" - {section.get('minutes')} minutes" if section.get("minutes") else ""),
                 styles["h2"],
             ))
             _render_teaching_section_pdf(story, section.get("content", {}), styles)
@@ -975,12 +1026,15 @@ def _render_teaching_pdf(story: list, result: dict, styles) -> None:
                 story.append(Paragraph(f"{index}. {escape(_plain_text(question))}", styles["bullet"]))
         _pdf_callout(story, "Teaching notes", case_study.get("teaching_notes"), styles, "F3F0FB")
     _render_sources_pdf(story, result, styles)
+    _render_quality_notes_pdf(story, result, styles)
 
 
 def _render_teaching_section_pdf(story: list, content: Any, styles) -> None:
     if not isinstance(content, dict):
         _pdf_bullets(story, content, styles)
         return
+    if content.get("explanation"):
+        _pdf_callout(story, "Explanation", content.get("explanation"), styles)
     if content.get("key_points"):
         story.append(_pdf_paragraph("Key Points", styles["h3"]))
         _pdf_bullets(story, content.get("key_points"), styles)
@@ -1055,7 +1109,14 @@ def _render_teaching_assessment_pdf(story: list, result: dict, styles) -> None:
             if isinstance(item, dict):
                 story.append(_pdf_paragraph(f"Problem {index}", styles["h3"]))
                 _pdf_callout(story, "Question", item.get("problem"), styles, "EEF3FA")
-                _pdf_callout(story, "Solution", item.get("solution"), styles, "EAF6F0")
+                _pdf_callout(story, "Given", item.get("given"), styles)
+                _pdf_callout(
+                    story,
+                    "Solution steps",
+                    item.get("solution_steps") or item.get("solution"),
+                    styles,
+                )
+                _pdf_callout(story, "Final answer", item.get("final_answer"), styles)
     assignments = _as_list(result.get("assignments"))
     if assignments:
         story.append(_pdf_paragraph("Assignments", styles["h2"]))
@@ -1063,12 +1124,42 @@ def _render_teaching_assessment_pdf(story: list, result: dict, styles) -> None:
             if isinstance(item, dict):
                 story.append(_pdf_paragraph(item.get("title"), styles["h3"]))
                 _pdf_callout(story, "Brief", item.get("prompt"), styles, "EEF3FA")
-                _pdf_bullets(story, item.get("rubric"), styles)
+                if item.get("deliverables"):
+                    story.append(_pdf_paragraph("Deliverables", styles["h3"]))
+                    _pdf_bullets(story, item.get("deliverables"), styles)
+                rubric_rows = []
+                for criterion in _as_list(item.get("rubric")):
+                    if isinstance(criterion, dict):
+                        rubric_rows.append([
+                            criterion.get("criterion"),
+                            f"{criterion.get('weight_percent', '')}%",
+                            criterion.get("description"),
+                        ])
+                    else:
+                        rubric_rows.append([criterion, "", ""])
+                if rubric_rows:
+                    _pdf_table(
+                        story,
+                        ["Criterion", "Weight", "Performance description"],
+                        rubric_rows,
+                        [1.6, 0.8, 4.3],
+                        styles,
+                    )
     bloom = _as_list(result.get("bloom_mapping"))
     if bloom:
-        rows = [[item.get("objective"), item.get("level")] for item in bloom if isinstance(item, dict)]
+        rows = [
+            [item.get("objective"), item.get("level"), item.get("assessment")]
+            for item in bloom
+            if isinstance(item, dict)
+        ]
         story.append(_pdf_paragraph("Bloom's Taxonomy Mapping", styles["h2"]))
-        _pdf_table(story, ["Learning Objective", "Bloom Level"], rows, [5.1, 1.6], styles)
+        _pdf_table(
+            story,
+            ["Learning Objective", "Bloom Level", "Assessment"],
+            rows,
+            [2.5, 1.2, 3.0],
+            styles,
+        )
     discussion = _as_list(result.get("discussion_questions"))
     if discussion:
         story.append(_pdf_paragraph("Discussion Questions", styles["h2"]))
@@ -1087,11 +1178,19 @@ def _render_teaching_assessment_pdf(story: list, result: dict, styles) -> None:
 
 
 def _render_research_pdf(story: list, result: dict, styles) -> None:
+    scope = result.get("scope") if isinstance(result.get("scope"), dict) else {}
+    if scope:
+        story.append(_pdf_paragraph("Research Scope", styles["h1"]))
+        _pdf_callout(story, "Discipline", scope.get("discipline"), styles)
+        _pdf_callout(story, "Problem statement", scope.get("problem_statement"), styles)
+        _pdf_callout(story, "Included", scope.get("inclusion_boundaries"), styles)
+        _pdf_callout(story, "Excluded", scope.get("exclusion_boundaries"), styles)
     story.append(_pdf_paragraph("Executive Summary", styles["h1"]))
     summary = result.get("executive_summary")
     if isinstance(summary, dict):
         _pdf_callout(story, "Evidence", summary.get("evidence"), styles, "EEF3FA")
         _pdf_callout(story, "Interpretation", summary.get("inference"), styles, "F3F0FB")
+        _pdf_callout(story, "Limitations", summary.get("limitations"), styles)
     else:
         story.append(_pdf_paragraph(summary, styles["body"]))
     themes = _as_list(result.get("themes"))
@@ -1101,6 +1200,8 @@ def _render_research_pdf(story: list, result: dict, styles) -> None:
             if not isinstance(item, dict):
                 continue
             block = [_pdf_paragraph(f"{index}. {_plain_text(item.get('theme'))}", styles["h2"])]
+            for evidence in _as_list(item.get("evidence")):
+                block.append(_pdf_paragraph(f"Evidence: {evidence}", styles["body"]))
             synthesis = item.get("synthesis")
             if isinstance(synthesis, dict):
                 block.append(_pdf_paragraph(
@@ -1130,10 +1231,14 @@ def _render_research_pdf(story: list, result: dict, styles) -> None:
                 f"Limitations: {_plain_text(item.get('limitations'))}",
                 styles["body"],
             ))
-            if item.get("papers"):
+            story.append(_pdf_paragraph(
+                f"Suitability: {_plain_text(item.get('suitability'))}", styles["body"]
+            ))
+            studies = item.get("studies") or item.get("papers")
+            if studies:
                 story.append(_pdf_paragraph(
                     "Representative studies: "
-                    + "; ".join(map(_plain_text, _as_list(item.get("papers")))),
+                    + "; ".join(map(_plain_text, _as_list(studies))),
                     styles["small"],
                 ))
     gaps = _as_list(result.get("research_gaps"))
@@ -1145,11 +1250,24 @@ def _render_research_pdf(story: list, result: dict, styles) -> None:
             story.append(_pdf_paragraph(f"{index}. {_plain_text(item.get('gap'))}", styles["h2"]))
             _pdf_callout(story, "Evidence for the gap", item.get("evidence"), styles, "EEF3FA")
             _pdf_callout(story, "Research implication", item.get("inference"), styles, "F3F0FB")
+            _pdf_callout(story, "Confidence", item.get("confidence"), styles)
     questions = _as_list(result.get("research_questions"))
     if questions:
         story.append(_pdf_paragraph("Proposed Research Questions", styles["h1"]))
         for index, question in enumerate(questions, start=1):
-            story.append(Paragraph(f"{index}. {escape(_plain_text(question))}", styles["bullet"]))
+            if isinstance(question, dict):
+                story.append(Paragraph(
+                    f"{index}. {escape(_plain_text(question.get('question')))}", styles["bullet"]
+                ))
+                _pdf_callout(story, "Rationale", question.get("rationale"), styles)
+                _pdf_callout(
+                    story,
+                    "Key variables or constructs",
+                    question.get("key_variables_or_constructs"),
+                    styles,
+                )
+            else:
+                story.append(Paragraph(f"{index}. {escape(_plain_text(question))}", styles["bullet"]))
     future = _as_list(result.get("future_scope"))
     if future:
         rows = [[item.get("area"), item.get("scope")] for item in future if isinstance(item, dict)]
@@ -1167,12 +1285,15 @@ def _render_research_pdf(story: list, result: dict, styles) -> None:
                     f"Rationale: {_plain_text(item.get('rationale'))}",
                     styles["body"],
                 ))
+                _pdf_callout(story, "Data collection", item.get("data_collection"), styles)
+                _pdf_callout(story, "Analysis", item.get("analysis"), styles)
     references = _as_list(result.get("apa_references"))
     if references:
         story.extend([PageBreak(), _pdf_paragraph("APA References", styles["h1"])])
         for reference in references:
             story.append(_pdf_paragraph(reference, styles["body"]))
     _render_sources_pdf(story, result, styles)
+    _render_quality_notes_pdf(story, result, styles)
 
 
 def _render_sources_pdf(story: list, result: dict, styles) -> None:
@@ -1197,6 +1318,22 @@ def _render_sources_pdf(story: list, result: dict, styles) -> None:
     if evidence:
         story.append(_pdf_paragraph("Evidence Base Named in the Teaching Plan", styles["h2"]))
         _pdf_bullets(story, evidence, styles)
+
+
+def _render_quality_notes_pdf(story: list, result: dict, styles) -> None:
+    notes = result.get("quality_notes")
+    if not isinstance(notes, dict):
+        return
+    story.append(_pdf_paragraph("Professor Review Checklist", styles["h1"]))
+    for heading, key in (
+        ("Limitations", "limitations"),
+        ("Unverified Claims", "unverified_claims"),
+        ("Review Priorities", "review_priorities"),
+    ):
+        values = _as_list(notes.get(key))
+        if values:
+            story.append(_pdf_paragraph(heading, styles["h2"]))
+            _pdf_bullets(story, values, styles)
 
 
 # ---------------------------------------------------------------------------
@@ -1281,9 +1418,8 @@ def _pptx_add_callout(slide, label: str, text: Any, x, y, w, h, accent: str):
     p2.font.size = PptxPt(16)
     p2.font.color.rgb = _pptx_color(INK)
     p2.line_spacing = 1.05
-    shape.fill.solid()
-    shape.fill.fore_color.rgb = _pptx_color(LIGHT)
-    shape.line.color.rgb = _pptx_color(LINE)
+    shape.fill.background()
+    shape.line.fill.background()
     return shape
 
 
@@ -1310,7 +1446,7 @@ def _pptx_title_slide(deck: Presentation, result: dict, agent_type: str, accent:
     slide.background.fill.fore_color.rgb = _pptx_color(NAVY)
     _pptx_add_text(
         slide,
-        "PROFESSOR AI  /  "
+        "PROFESSOR AI - "
         + ("TEACHING & CURRICULUM" if agent_type == "teaching" else "RESEARCH SYNTHESIS"),
         0.8, 0.65, 10.8, 0.32, size=12, color=accent, bold=True,
     )
@@ -1323,8 +1459,8 @@ def _pptx_title_slide(deck: Presentation, result: dict, agent_type: str, accent:
     )
     overview = result.get("overview") if isinstance(result.get("overview"), dict) else {}
     subtitle = (
-        f"{overview.get('course', 'Faculty teaching package')}  |  "
-        f"{overview.get('duration_minutes', '')} minutes  |  "
+        f"{overview.get('course', 'Faculty teaching package')} - "
+        f"{overview.get('duration_minutes', '')} minutes - "
         f"{overview.get('difficulty', '')}"
         if agent_type == "teaching"
         else "Literature review, research gaps, questions, and methodology direction"
@@ -1596,3 +1732,375 @@ def _pptx_sources_slide(deck: Presentation, result: dict, number: int, accent: s
         _pptx_add_bullets(slide, values[start:start + 7], 0.82, 1.55, 11.75, 5.25,
                           size=15, max_items=7)
         _pptx_add_footer(slide, "Verify citation details before academic publication or distribution.")
+
+
+# ---------------------------------------------------------------------------
+# PPTX v2 layouts: complete, paginated, and readable at presentation distance.
+# These definitions intentionally replace the earlier compact renderers above.
+# ---------------------------------------------------------------------------
+
+
+def _pptx_item_text(value: Any) -> str:
+    if isinstance(value, dict):
+        return "; ".join(
+            f"{_humanize(key)}: {_plain_text(item)}"
+            for key, item in value.items()
+            if item not in (None, "", [])
+        )
+    return _plain_text(value)
+
+
+def _pptx_pages(values: Any, *, max_items: int = 6, max_chars: int = 760) -> list[list[str]]:
+    pages: list[list[str]] = []
+    current: list[str] = []
+    current_chars = 0
+    for value in _as_list(values):
+        text = _pptx_item_text(value)
+        if not text:
+            continue
+        if current and (len(current) >= max_items or current_chars + len(text) > max_chars):
+            pages.append(current)
+            current = []
+            current_chars = 0
+        current.append(text)
+        current_chars += len(text)
+    if current:
+        pages.append(current)
+    return pages
+
+
+def _pptx_text_pages(value: Any, *, max_chars: int = 900) -> list[str]:
+    text = _plain_text(value)
+    if not text:
+        return []
+    paragraphs = [part.strip() for part in text.split("\n") if part.strip()]
+    pages: list[str] = []
+    current = ""
+    for paragraph in paragraphs or [text]:
+        words = paragraph.split()
+        while words:
+            available = max_chars - len(current)
+            piece: list[str] = []
+            while words and len(" ".join(piece + [words[0]])) <= max(80, available):
+                piece.append(words.pop(0))
+            if not piece:
+                piece.append(words.pop(0))
+            candidate = (current + "\n\n" + " ".join(piece)).strip()
+            if current and len(candidate) > max_chars:
+                pages.append(current)
+                current = " ".join(piece)
+            else:
+                current = candidate
+    if current:
+        pages.append(current)
+    return pages
+
+
+def _pptx_new_slide(deck, title: str, section: str, number: int, accent: str):
+    slide = deck.slides.add_slide(deck.slide_layouts[6])
+    _pptx_add_header(slide, title, section, number, accent)
+    return slide
+
+
+def _pptx_list_slides(
+    deck,
+    *,
+    title: str,
+    section: str,
+    values: Any,
+    number: int,
+    accent: str,
+    size: int = 19,
+    footer: str = "",
+) -> int:
+    pages = _pptx_pages(values)
+    for page_index, page in enumerate(pages, start=1):
+        page_title = title if len(pages) == 1 else f"{title} ({page_index} of {len(pages)})"
+        slide = _pptx_new_slide(deck, page_title, section, number, accent)
+        number += 1
+        _pptx_add_bullets(slide, page, 0.85, 1.65, 11.65, 4.95, size=size, max_items=len(page))
+        if footer:
+            _pptx_add_footer(slide, footer)
+    return number
+
+
+def _pptx_prose_slides(
+    deck,
+    *,
+    title: str,
+    section: str,
+    value: Any,
+    number: int,
+    accent: str,
+    label: str = "",
+) -> int:
+    pages = _pptx_text_pages(value)
+    for page_index, page in enumerate(pages, start=1):
+        page_title = title if len(pages) == 1 else f"{title} ({page_index} of {len(pages)})"
+        slide = _pptx_new_slide(deck, page_title, section, number, accent)
+        number += 1
+        if label:
+            _pptx_add_text(slide, label.upper(), 0.85, 1.72, 11.4, 0.3, size=11, color=accent, bold=True)
+        _pptx_add_text(slide, page, 0.85, 2.12 if label else 1.72, 11.55, 4.55,
+                       size=18, color=INK)
+    return number
+
+
+def _render_teaching_pptx(deck: Presentation, result: dict, accent: str):
+    number = 2
+    overview = result.get("overview") if isinstance(result.get("overview"), dict) else {}
+    slide = _pptx_new_slide(deck, "Session Overview", "Teaching Package", number, accent)
+    number += 1
+    _pptx_add_text(slide, overview.get("lesson_purpose"), 0.8, 1.6, 7.4, 1.45,
+                   size=23, color=NAVY, bold=True)
+    session_details = [
+        f"Course: {overview.get('course', 'General')}",
+        f"Audience: {overview.get('audience', 'University students')}",
+        f"Duration: {overview.get('duration_minutes', '')} minutes",
+        f"Difficulty: {overview.get('difficulty', 'intermediate')}",
+    ]
+    _pptx_add_bullets(slide, session_details, 8.55, 1.62, 3.8, 2.25, size=17, max_items=4)
+    _pptx_add_text(slide, "Prerequisite knowledge", 0.8, 3.65, 5.6, 0.4, size=22, color=NAVY, bold=True)
+    _pptx_add_bullets(slide, overview.get("prerequisite_knowledge"), 0.8, 4.14, 5.65, 2.25,
+                      size=17, max_items=6)
+    _pptx_add_text(slide, "Evidence base", 6.8, 3.65, 5.5, 0.4, size=22, color=NAVY, bold=True)
+    _pptx_add_bullets(slide, overview.get("evidence_base"), 6.8, 4.14, 5.55, 2.25,
+                      size=16, max_items=6)
+
+    objectives = []
+    for item in _as_list(result.get("learning_objectives")):
+        if isinstance(item, dict):
+            objectives.append(
+                f"{item.get('id')}: {item.get('objective')} [{item.get('bloom_level')}]"
+            )
+        else:
+            objectives.append(item)
+    number = _pptx_list_slides(
+        deck, title="Learning Objectives", section="Teaching Package", values=objectives,
+        number=number, accent=accent, footer="Each objective is mapped to an assessment.",
+    )
+
+    sections = [item for item in _as_list(result.get("lecture_sections")) if isinstance(item, dict)]
+    roadmap = [f"{item.get('minutes', '')} min - {item.get('title', 'Lecture section')}" for item in sections]
+    number = _pptx_list_slides(
+        deck, title="Session Roadmap", section="Teaching Package", values=roadmap,
+        number=number, accent=accent,
+    )
+    for section_item in sections:
+        section_title = _plain_text(section_item.get("title"), "Lecture Section")
+        content = section_item.get("content") if isinstance(section_item.get("content"), dict) else {}
+        number = _pptx_prose_slides(
+            deck, title=section_title, section=f"{section_item.get('minutes', '')} minutes",
+            value=content.get("explanation"), number=number, accent=accent, label="Explanation",
+        )
+        number = _pptx_list_slides(
+            deck, title=f"{section_title}: Key Points", section="Lecture Notes",
+            values=content.get("key_points"), number=number, accent=accent,
+        )
+        application = []
+        for label, key in (
+            ("Worked example", "worked_example"),
+            ("Classroom activity", "classroom_activity"),
+            ("Concept check", "concept_check"),
+            ("Teaching tip", "teaching_tip"),
+        ):
+            if content.get(key):
+                application.append(f"{label}: {_plain_text(content.get(key))}")
+        application.extend(f"Common error: {_plain_text(item)}" for item in _as_list(content.get("common_errors")))
+        number = _pptx_list_slides(
+            deck, title=f"{section_title}: Application", section="Lecture Notes",
+            values=application, number=number, accent=accent, size=17,
+        )
+
+    number = _pptx_list_slides(
+        deck, title="Core Formula Sheet", section="Reference",
+        values=overview.get("core_formulas"), number=number, accent=accent, size=20,
+    )
+
+    case_study = result.get("case_study")
+    if isinstance(case_study, dict):
+        number = _pptx_prose_slides(
+            deck, title=_plain_text(case_study.get("title"), "Applied Case"),
+            section="Case Study", value=case_study.get("scenario"), number=number,
+            accent=accent, label="Scenario",
+        )
+        number = _pptx_list_slides(
+            deck, title="Case Questions", section="Case Study", values=case_study.get("questions"),
+            number=number, accent=accent,
+            footer="Facilitation notes are included in the professor handbook.",
+        )
+
+    number = _pptx_list_slides(
+        deck, title="Discussion Questions", section="Student Engagement",
+        values=result.get("discussion_questions"), number=number, accent=accent,
+    )
+
+    for index, item in enumerate(_as_list(result.get("mcqs")), start=1):
+        if not isinstance(item, dict):
+            continue
+        slide = _pptx_new_slide(deck, f"Knowledge Check {index}", "Assessment", number, accent)
+        number += 1
+        _pptx_add_text(slide, item.get("question"), 0.8, 1.5, 11.7, 0.9,
+                       size=22, color=NAVY, bold=True)
+        options = [f"{chr(65 + i)}. {_plain_text(option)}" for i, option in enumerate(_as_list(item.get("options")))]
+        _pptx_add_bullets(slide, options, 0.95, 2.55, 11.4, 2.75, size=18, max_items=4)
+        answer = f"Answer: {item.get('answer')} - {_plain_text(item.get('explanation'))}"
+        _pptx_add_text(slide, answer, 0.85, 5.65, 11.5, 0.78, size=15, color=MUTED)
+
+    for item in _as_list(result.get("assignments")):
+        if not isinstance(item, dict):
+            continue
+        values = [f"Task: {_plain_text(item.get('prompt'))}"]
+        values.extend(f"Deliverable: {_plain_text(value)}" for value in _as_list(item.get("deliverables")))
+        for criterion in _as_list(item.get("rubric")):
+            if isinstance(criterion, dict):
+                values.append(
+                    f"{criterion.get('criterion')} ({criterion.get('weight_percent')}%): "
+                    f"{criterion.get('description')}"
+                )
+        number = _pptx_list_slides(
+            deck, title=_plain_text(item.get("title"), "Assignment"), section="Assignment",
+            values=values, number=number, accent=accent, size=17,
+        )
+
+    for index, item in enumerate(_as_list(result.get("numerical_problems")), start=1):
+        if not isinstance(item, dict):
+            continue
+        values = [f"Problem: {_plain_text(item.get('problem'))}"]
+        values.extend(f"Given: {_plain_text(value)}" for value in _as_list(item.get("given")))
+        values.extend(
+            f"Step {step_index}: {_plain_text(value)}"
+            for step_index, value in enumerate(_as_list(item.get("solution_steps")), start=1)
+        )
+        values.append(f"Final answer: {_plain_text(item.get('final_answer'))}")
+        number = _pptx_list_slides(
+            deck, title=f"Numerical Problem {index}", section="Assessment",
+            values=values, number=number, accent=accent, size=17,
+        )
+
+    number = _pptx_list_slides(
+        deck, title="Bloom's Taxonomy Mapping", section="Assessment",
+        values=result.get("bloom_mapping"), number=number, accent=accent, size=17,
+    )
+    number = _pptx_list_slides(
+        deck, title="Viva Questions", section="Assessment",
+        values=result.get("viva_questions"), number=number, accent=accent, size=17,
+    )
+    number = _pptx_quality_slides(deck, result, number, accent)
+    _pptx_sources_slide(deck, result, number, accent)
+
+
+def _render_research_pptx(deck: Presentation, result: dict, accent: str):
+    number = 2
+    scope = result.get("scope") if isinstance(result.get("scope"), dict) else {}
+    scope_values = [
+        f"Discipline: {_plain_text(scope.get('discipline'))}",
+        f"Problem statement: {_plain_text(scope.get('problem_statement'))}",
+    ]
+    scope_values.extend(f"Included: {_plain_text(value)}" for value in _as_list(scope.get("inclusion_boundaries")))
+    scope_values.extend(f"Excluded: {_plain_text(value)}" for value in _as_list(scope.get("exclusion_boundaries")))
+    number = _pptx_list_slides(
+        deck, title="Research Scope", section="Research Synthesis", values=scope_values,
+        number=number, accent=accent, size=18,
+    )
+
+    summary = result.get("executive_summary")
+    if isinstance(summary, dict):
+        for label, key in (("Evidence", "evidence"), ("Interpretation", "inference"), ("Limitations", "limitations")):
+            number = _pptx_prose_slides(
+                deck, title=f"Executive Summary: {label}", section="Research Synthesis",
+                value=summary.get(key), number=number, accent=accent, label=label,
+            )
+
+    for item in _as_list(result.get("themes")):
+        if not isinstance(item, dict):
+            continue
+        values = [f"Evidence: {_plain_text(value)}" for value in _as_list(item.get("evidence"))]
+        synthesis = item.get("synthesis") if isinstance(item.get("synthesis"), dict) else {}
+        values.extend([
+            f"Synthesis: {_plain_text(synthesis.get('evidence'))}",
+            f"Interpretation: {_plain_text(synthesis.get('inference'))}",
+        ])
+        if item.get("papers"):
+            values.append("Studies: " + "; ".join(map(_plain_text, _as_list(item.get("papers")))))
+        number = _pptx_list_slides(
+            deck, title=_plain_text(item.get("theme"), "Research Theme"),
+            section="Thematic Synthesis", values=values, number=number, accent=accent, size=17,
+        )
+
+    for item in _as_list(result.get("methodology_comparison")):
+        if not isinstance(item, dict):
+            continue
+        values = []
+        values.extend(f"Study: {_plain_text(value)}" for value in _as_list(item.get("studies")))
+        values.extend(f"Strength: {_plain_text(value)}" for value in _as_list(item.get("strengths")))
+        values.extend(f"Limitation: {_plain_text(value)}" for value in _as_list(item.get("limitations")))
+        values.append(f"Suitability: {_plain_text(item.get('suitability'))}")
+        number = _pptx_list_slides(
+            deck, title=_plain_text(item.get("method"), "Method"),
+            section="Methodology Comparison", values=values, number=number, accent=accent, size=17,
+        )
+
+    for item in _as_list(result.get("research_gaps")):
+        if not isinstance(item, dict):
+            continue
+        values = [
+            f"Evidence: {_plain_text(item.get('evidence'))}",
+            f"Research implication: {_plain_text(item.get('inference'))}",
+            f"Confidence: {_plain_text(item.get('confidence'))}",
+        ]
+        number = _pptx_list_slides(
+            deck, title=_plain_text(item.get("gap"), "Research Gap"), section="Research Gaps",
+            values=values, number=number, accent=accent, size=18,
+        )
+
+    for item in _as_list(result.get("research_questions")):
+        if not isinstance(item, dict):
+            continue
+        values = [
+            f"Question: {_plain_text(item.get('question'))}",
+            f"Rationale: {_plain_text(item.get('rationale'))}",
+            "Key variables or constructs: "
+            + "; ".join(map(_plain_text, _as_list(item.get("key_variables_or_constructs")))),
+        ]
+        number = _pptx_list_slides(
+            deck, title="Proposed Research Question", section="Research Direction",
+            values=values, number=number, accent=accent, size=18,
+        )
+
+    number = _pptx_list_slides(
+        deck, title="Future Research Scope", section="Research Direction",
+        values=result.get("future_scope"), number=number, accent=accent, size=18,
+    )
+    for item in _as_list(result.get("methodology_suggestions")):
+        if not isinstance(item, dict):
+            continue
+        values = [
+            f"Rationale: {_plain_text(item.get('rationale'))}",
+            f"Data collection: {_plain_text(item.get('data_collection'))}",
+            f"Analysis: {_plain_text(item.get('analysis'))}",
+        ]
+        number = _pptx_list_slides(
+            deck, title=_plain_text(item.get("suggestion"), "Methodology Recommendation"),
+            section="Research Design", values=values, number=number, accent=accent, size=18,
+        )
+    number = _pptx_quality_slides(deck, result, number, accent)
+    _pptx_sources_slide(deck, result, number, accent)
+
+
+def _pptx_quality_slides(deck, result: dict, number: int, accent: str) -> int:
+    notes = result.get("quality_notes")
+    if not isinstance(notes, dict):
+        return number
+    values = []
+    values.extend(f"Limitation: {_plain_text(value)}" for value in _as_list(notes.get("limitations")))
+    values.extend(
+        f"Unverified claim: {_plain_text(value)}" for value in _as_list(notes.get("unverified_claims"))
+    )
+    values.extend(
+        f"Review priority: {_plain_text(value)}" for value in _as_list(notes.get("review_priorities"))
+    )
+    return _pptx_list_slides(
+        deck, title="Professor Review Checklist", section="Quality Review", values=values,
+        number=number, accent=accent, size=17,
+    )

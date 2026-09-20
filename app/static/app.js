@@ -56,7 +56,7 @@ function showLoginView(message = "") {
   history.replaceState(null, "", "/login");
   $("#auth-eyebrow").textContent = "SECURE FACULTY ACCESS";
   $("#auth-title").textContent = "Welcome back";
-  $("#auth-intro").textContent = "Sign in with your institutional email. We’ll send a secure one-time code—no password required.";
+  $("#auth-intro").textContent = "Sign in with your institutional email. We'll send a secure one-time code - no password required.";
   $("#email-register").classList.add("hidden");
   $("#otp-verify").classList.add("hidden");
   $("#otp-request").classList.remove("hidden");
@@ -68,7 +68,7 @@ function showRegisterView(message = "") {
   history.replaceState(null, "", "/register");
   $("#auth-eyebrow").textContent = "FIRST-TIME VERIFICATION";
   $("#auth-title").textContent = "Verify your email";
-  $("#auth-intro").textContent = "Enter your email once. We’ll send a verification link before OTP sign-in is enabled.";
+  $("#auth-intro").textContent = "Enter your email once. We'll send a verification link before OTP sign-in is enabled.";
   $("#otp-request").classList.add("hidden");
   $("#otp-verify").classList.add("hidden");
   $("#email-register").classList.remove("hidden");
@@ -114,7 +114,7 @@ $("#otp-request").onsubmit = async (event) => {
   event.preventDefault();
   const button = event.submitter;
   button.disabled = true;
-  setAuthMessage("Sending your secure code…");
+  setAuthMessage("Sending your secure code...");
   try {
     email = $("#email").value;
     const data = await api("/api/auth/request-otp", {
@@ -147,7 +147,7 @@ $("#email-register").onsubmit = async (event) => {
   event.preventDefault();
   const button = event.submitter;
   button.disabled = true;
-  setAuthMessage("Requesting your first-time verification link…");
+  setAuthMessage("Requesting your first-time verification link...");
   try {
     email = $("#register-email-input").value;
     const data = await api("/api/auth/register-email", {
@@ -174,7 +174,7 @@ $("#otp-verify").onsubmit = async (event) => {
   event.preventDefault();
   const button = event.submitter;
   button.disabled = true;
-  setAuthMessage("Verifying your access…");
+  setAuthMessage("Verifying your access...");
   try {
     const user = await api("/api/auth/verify", {
       method: "POST",
@@ -201,7 +201,7 @@ function openAgent(agent) {
   $("#workbench-kicker").textContent = isTeaching ? "TEACHING & CURRICULUM" : "RESEARCH & SYNTHESIS";
   $("#workbench-title").textContent = isTeaching ? "AI Teaching Assistant" : "Research Paper Assistant";
   $("#workbench-description").textContent = isTeaching
-    ? "Tell the agent what you’re teaching and it will assemble a complete, review-ready package."
+    ? "Tell the agent what you're teaching and it will assemble a complete, review-ready package."
     : "Define the problem and the agent will synthesize your paper library into a research direction.";
   $$(".nav-item").forEach((item) => item.classList.remove("active"));
   document.querySelector(`.nav-item[data-agent-target="${agent}"]`)?.classList.add("active");
@@ -240,7 +240,7 @@ async function loadDocuments() {
   const documents = await api("/api/documents");
   $("#stat-documents").textContent = documents.length;
   $("#documents").innerHTML = documents.length
-    ? documents.map((doc) => `<span class="document-chip">${escapeHtml(doc.collection.replaceAll("_", " "))} · ${escapeHtml(doc.filename)}</span>`).join("")
+    ? documents.map((doc) => `<span class="document-chip">${escapeHtml(doc.collection.replaceAll("_", " "))} - ${escapeHtml(doc.filename)}</span>`).join("")
     : '<span class="empty-library">No documents uploaded yet.</span>';
   return documents;
 }
@@ -272,12 +272,12 @@ async function loadJobs() {
         const title = escapeHtml(job.title || typeLabel);
         const context = escapeHtml(job.course || typeLabel);
         return `<div class="activity-row">
-          <span class="activity-agent ${teaching ? "teaching" : "research"}">${teaching ? "✦" : "⌁"}</span>
-          <div><strong>${title}</strong><small>${context} · ${formatJobDate(job.started_at)}</small></div>
+          <span class="activity-agent ${teaching ? "teaching" : "research"}">${teaching ? "+" : "~"}</span>
+          <div><strong>${title}</strong><small>${context} - ${formatJobDate(job.started_at)}</small></div>
           <span class="activity-status">${escapeHtml(job.status)}</span>
         </div>`;
       }).join("")
-    : `<div class="activity-empty"><span>◇</span><div><strong>No faculty work generated yet</strong><p>Your lecture packages and research syntheses will appear here.</p></div></div>`;
+    : `<div class="activity-empty"><span>O</span><div><strong>No faculty work generated yet</strong><p>Your lecture packages and research syntheses will appear here.</p></div></div>`;
   return jobs;
 }
 
@@ -289,7 +289,7 @@ function updateReadiness(documents, jobs) {
   $("#readiness-progress").style.width = `${score}%`;
   if (documents.length) {
     $("#readiness-documents").classList.add("complete");
-    $("#readiness-documents").innerHTML = "<span>✓</span> Knowledge sources uploaded";
+    $("#readiness-documents").innerHTML = "<span>OK</span> Knowledge sources uploaded";
   }
   if (score === 100) {
     $("#readiness-copy").textContent = "Your faculty workspace is grounded and ready for teaching and research work.";
@@ -313,7 +313,7 @@ $("#upload-form").onsubmit = async (event) => {
   data.append("collection", $("#collection").value);
   data.append("file", $("#file").files[0]);
   button.disabled = true;
-  button.textContent = "Uploading…";
+  button.textContent = "Uploading...";
   try {
     const response = await fetch("/api/documents", { method: "POST", body: data });
     await parseApiResponse(response, "/api/documents");
@@ -331,12 +331,12 @@ $("#upload-form").onsubmit = async (event) => {
 async function run(url, payload) {
   $("#output").classList.remove("hidden");
   $("#loader").classList.remove("hidden");
-  $("#result").textContent = "Your specialist agent is working…";
+  $("#result").textContent = "Your specialist agent is working...";
   $("#downloads").innerHTML = "";
   $("#output").scrollIntoView({ behavior: "smooth", block: "start" });
   try {
     const queued = await api(url, { method: "POST", body: JSON.stringify(payload) });
-    $("#result").textContent = "Your request is queued. Preparing professor-ready documents…";
+    $("#result").textContent = "Your request is queued. Preparing professor-ready documents...";
     const data = await waitForJob(queued.job_id);
     if (data.status === "failed") {
       throw new Error(data.error || "Agent generation failed. Please retry.");
@@ -353,7 +353,7 @@ async function run(url, payload) {
 
 function renderDownloads(artifacts) {
   return artifacts
-    .map((artifact) => `<a class="download" href="/api/artifacts/${artifact.id}">↓ Download ${artifact.type.toUpperCase()}</a>`)
+    .map((artifact) => `<a class="download" href="/api/artifacts/${artifact.id}">Download ${artifact.type.toUpperCase()}</a>`)
     .join("");
 }
 
@@ -368,7 +368,7 @@ async function waitForJob(jobId) {
       return job;
     }
     const elapsed = Math.max(1, attempt + 1) * 2;
-    $("#result").textContent = `Still working… generating documents and citations (${elapsed}s elapsed).`;
+    $("#result").textContent = `Still working... generating documents and citations (${elapsed}s elapsed).`;
     await sleep(2000);
   }
   throw new Error("The agent is still running. Please check Recent Faculty Work in a minute.");
@@ -383,7 +383,10 @@ $("#teaching-form").onsubmit = (event) => {
   run("/api/agents/teaching", {
     topic: $("#teach-topic").value,
     course: $("#teach-course").value || "General",
+    audience: $("#teach-audience").value || "University students",
     duration_minutes: +$("#teach-duration").value,
+    difficulty: $("#teach-difficulty").value,
+    instructions: $("#teach-instructions").value.trim(),
     use_web_search: $("#teach-web").checked,
     collections: ["previous_notes", "books", "case_studies"],
   });
@@ -394,6 +397,7 @@ $("#research-form").onsubmit = (event) => {
   run("/api/agents/research", {
     research_topic: $("#research-topic").value,
     discipline: $("#discipline").value || "General",
+    instructions: $("#research-instructions").value.trim(),
     use_web_search: $("#research-web").checked,
     collections: ["research_papers"],
   });

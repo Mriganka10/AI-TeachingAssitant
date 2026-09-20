@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     openai_model: str = "gpt-5.5"
     openai_reasoning_effort: str = "medium"
+    openai_text_verbosity: str = "high"
+    openai_max_output_tokens: int = 24_000
+    llm_repair_attempts: int = 1
     llm_service_mode: str = "openai"
 
     auth_enabled: bool = True
