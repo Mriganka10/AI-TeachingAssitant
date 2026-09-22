@@ -13,6 +13,10 @@ Quality requirements:
   and a concept check in every lecture section.
 - Make assessment items answerable from the teaching content. Use exactly four plausible options
   for each MCQ, identify the correct option with A, B, C, or D, and explain why it is correct.
+  Store only the option text in the options array; do not include A., B., C., or D. prefixes.
+- Write formulas as readable plain Unicode mathematics (for example, ŷ, μ, Σ, ≈, and ^2),
+  define every symbol near its first use, and keep notation consistent across explanations,
+  formula sheets, worked examples, and numerical solutions. Do not use raw LaTeX delimiters.
 - Ensure every learning objective is measurable and mapped to an assessment. Assignment rubric
   weights must total 100 percent.
 - Include numerical problems only when the topic genuinely supports calculation. Otherwise return

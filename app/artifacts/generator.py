@@ -1,8 +1,11 @@
 import json
+import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from html import escape
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from docx import Document
 from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT, WD_TABLE_ALIGNMENT
@@ -12,7 +15,7 @@ from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 from pptx import Presentation
 from pptx.dml.color import RGBColor as PptxRGBColor
-from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
+from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE, PP_ALIGN
 from pptx.util import Inches as PptxInches
 from pptx.util import Pt as PptxPt
 from reportlab.lib import colors
@@ -20,6 +23,8 @@ from reportlab.lib.enums import TA_LEFT
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFError, TTFont
 from reportlab.platypus import (
     KeepTogether,
     PageBreak,
@@ -42,12 +47,21 @@ WHITE = "FFFFFF"
 GREEN = "19845F"
 GOLD = "9A6B13"
 
+_OPTION_PREFIX = re.compile(r"^\s*(?:option\s+)?[A-Ha-h]\s*[.):\-]\s*", re.IGNORECASE)
+_MATH_CHARACTERS = re.compile(
+    r"[\u0370-\u03ff\u2070-\u209f\u2200-\u22ff\u00b5\u0176\u0177\u0232\u0233]"
+)
+_PDF_FONT_REGULAR = "Helvetica"
+_PDF_FONT_BOLD = "Helvetica-Bold"
+_SUBSCRIPT_TRANSLATION = str.maketrans("0123456789ijn", "₀₁₂₃₄₅₆₇₈₉ᵢⱼₙ")
+_SUPERSCRIPT_TRANSLATION = str.maketrans("0123456789+-", "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻")
+
 
 def _plain_text(value: Any, fallback: str = "") -> str:
     if value is None:
         return fallback
     if isinstance(value, str):
-        return value.strip()
+        return _clean_generated_text(value.strip())
     if isinstance(value, bool):
         return "Yes" if value else "No"
     if isinstance(value, dict):
@@ -70,6 +84,114 @@ def _plain_text(value: Any, fallback: str = "") -> str:
     if isinstance(value, (list, tuple)):
         return "\n".join(_plain_text(item) for item in value if item is not None)
     return str(value)
+
+
+def _clean_generated_text(value: str) -> str:
+    """Remove model-facing Markdown and tracking parameters from exported prose."""
+    value = re.sub(
+        r"\[([^\]]+)\]\((https?://[^)]+)\)",
+        lambda match: f"{match.group(1)} ({_clean_url(match.group(2))})",
+        value,
+    )
+    value = re.sub(r"(?<!\()https?://[^\s)]+", lambda match: _clean_url(match.group(0)), value)
+    value = value.replace("utm_source=openai&", "").replace("?utm_source=openai", "")
+    return _format_math_notation(value)
+
+
+def _format_math_notation(value: str) -> str:
+    """Convert common model notation into portable, readable Unicode mathematics."""
+    replacements = {
+        r"\hat{y}": "ŷ",
+        r"\mu": "μ",
+        r"\Sigma": "Σ",
+        r"\sum": "Σ",
+        r"\approx": "≈",
+        r"\times": "×",
+        r"\leq": "≤",
+        r"\geq": "≥",
+    }
+    for source, replacement in replacements.items():
+        value = value.replace(source, replacement)
+    value = value.replace("$", "")
+    value = re.sub(
+        r"_\{([0-9ijn]+)\}|_([0-9ijn]+)",
+        lambda match: (match.group(1) or match.group(2)).translate(_SUBSCRIPT_TRANSLATION),
+        value,
+    )
+    value = re.sub(
+        r"\^\{([0-9+\-]+)\}|\^([0-9+\-]+)",
+        lambda match: (match.group(1) or match.group(2)).translate(_SUPERSCRIPT_TRANSLATION),
+        value,
+    )
+    return value
+
+
+def _mcq_option_text(value: Any) -> str:
+    """Return an option without a model-supplied A./B)/Option C prefix."""
+    return _OPTION_PREFIX.sub("", _plain_text(value), count=1).strip()
+
+
+def _contains_math(text: Any) -> bool:
+    return bool(_MATH_CHARACTERS.search(_plain_text(text)))
+
+
+def _register_pdf_fonts() -> tuple[str, str]:
+    """Register an embedded Unicode font so mathematical glyphs never become squares."""
+    global _PDF_FONT_REGULAR, _PDF_FONT_BOLD
+    if _PDF_FONT_REGULAR != "Helvetica":
+        return _PDF_FONT_REGULAR, _PDF_FONT_BOLD
+
+    candidates = [
+        (Path("C:/Windows/Fonts/arial.ttf"), Path("C:/Windows/Fonts/arialbd.ttf")),
+        (
+            Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+            Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+        ),
+        (
+            Path(pdfmetrics.__file__).resolve().parents[1] / "fonts" / "Vera.ttf",
+            Path(pdfmetrics.__file__).resolve().parents[1] / "fonts" / "VeraBd.ttf",
+        ),
+    ]
+    for regular_path, bold_path in candidates:
+        if not (regular_path.exists() and bold_path.exists()):
+            continue
+        try:
+            pdfmetrics.registerFont(TTFont("ProfessorSans", str(regular_path)))
+            pdfmetrics.registerFont(TTFont("ProfessorSans-Bold", str(bold_path)))
+            pdfmetrics.registerFontFamily(
+                "ProfessorSans",
+                normal="ProfessorSans",
+                bold="ProfessorSans-Bold",
+                italic="ProfessorSans",
+                boldItalic="ProfessorSans-Bold",
+            )
+        except TTFError:
+            _PDF_FONT_REGULAR = "Helvetica"
+            _PDF_FONT_BOLD = "Helvetica-Bold"
+        else:
+            _PDF_FONT_REGULAR = "ProfessorSans"
+            _PDF_FONT_BOLD = "ProfessorSans-Bold"
+            break
+    return _PDF_FONT_REGULAR, _PDF_FONT_BOLD
+
+
+def _clean_url(value: str) -> str:
+    try:
+        parts = urlsplit(value)
+        query = urlencode(
+            [(key, item) for key, item in parse_qsl(parts.query) if not key.lower().startswith("utm_")]
+        )
+        return urlunsplit((parts.scheme, parts.netloc, parts.path, query, parts.fragment))
+    except ValueError:
+        return value
+
+
+def _shorten(value: Any, limit: int) -> str:
+    text = _plain_text(value)
+    if len(text) <= limit:
+        return text
+    shortened = text[: max(1, limit - 1)].rsplit(" ", 1)[0].rstrip(" ,;:")
+    return (shortened or text[: limit - 1]).rstrip() + "…"
 
 
 def _as_list(value: Any) -> list[Any]:
@@ -100,13 +222,20 @@ def create_artifacts(result: dict, *, agent_type: str, output_dir: Path) -> list
     base = _safe_title(result.get("title", agent_type))
     json_path = output_dir / f"{base}.json"
     json_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
-    paths = [
-        json_path,
-        _create_docx(result, output_dir / f"{base}.docx", agent_type),
-        _create_pdf(result, output_dir / f"{base}.pdf", agent_type),
-        _create_pptx(result, output_dir / f"{base}.pptx", agent_type),
-    ]
-    return paths
+    builders = (
+        (_create_docx, output_dir / f"{base}.docx"),
+        (_create_pdf, output_dir / f"{base}.pdf"),
+        (_create_pptx, output_dir / f"{base}.pptx"),
+    )
+    # Each exporter writes a different file and has no shared mutable document state. Running
+    # them together shortens the post-generation wait without changing any output format.
+    with ThreadPoolExecutor(max_workers=len(builders), thread_name_prefix="artifact") as executor:
+        futures = [
+            executor.submit(builder, result, destination, agent_type)
+            for builder, destination in builders
+        ]
+        generated = [future.result() for future in futures]
+    return [json_path, *generated]
 
 
 # ---------------------------------------------------------------------------
@@ -115,9 +244,11 @@ def create_artifacts(result: dict, *, agent_type: str, output_dir: Path) -> list
 
 
 def _set_docx_font(run, *, size: float, color: str = INK, bold: bool = False) -> None:
-    run.font.name = "Arial"
-    run._element.get_or_add_rPr().rFonts.set(qn("w:ascii"), "Arial")
-    run._element.get_or_add_rPr().rFonts.set(qn("w:hAnsi"), "Arial")
+    font_name = "Cambria Math" if _contains_math(run.text) else "Arial"
+    run.font.name = font_name
+    fonts = run._element.get_or_add_rPr().rFonts
+    for attribute in ("w:ascii", "w:hAnsi", "w:eastAsia", "w:cs"):
+        fonts.set(qn(attribute), font_name)
     run.font.size = Pt(size)
     run.font.color.rgb = _color(color)
     run.bold = bold
@@ -265,13 +396,15 @@ def _add_docx_cover(doc: Document, result: dict, agent_type: str) -> None:
 def _add_docx_bullet(doc: Document, text: Any, *, level: int = 0) -> None:
     paragraph = doc.add_paragraph(style="List Bullet" if level == 0 else "List Bullet 2")
     paragraph.paragraph_format.space_after = Pt(3)
-    paragraph.add_run(_plain_text(text))
+    run = paragraph.add_run(_plain_text(text))
+    _set_docx_font(run, size=10)
 
 
 def _add_docx_number(doc: Document, text: Any) -> None:
     paragraph = doc.add_paragraph(style="List Number")
     paragraph.paragraph_format.space_after = Pt(4)
-    paragraph.add_run(_plain_text(text))
+    run = paragraph.add_run(_plain_text(text))
+    _set_docx_font(run, size=10)
 
 
 def _add_docx_labelled(doc: Document, label: str, value: Any) -> None:
@@ -282,7 +415,8 @@ def _add_docx_labelled(doc: Document, label: str, value: Any) -> None:
     p.paragraph_format.space_after = Pt(5)
     run = p.add_run(f"{label}: ")
     _set_docx_font(run, size=10.5, color=NAVY, bold=True)
-    p.add_run(text)
+    body = p.add_run(text)
+    _set_docx_font(body, size=10.5)
 
 
 def _add_docx_callout(doc: Document, label: str, value: Any, fill: str = LIGHT) -> None:
@@ -506,7 +640,11 @@ def _render_teaching_assessment_docx(doc: Document, result: dict) -> None:
             run = q.add_run(f"{index}. {_plain_text(item.get('question'))}")
             _set_docx_font(run, size=10.5, color=NAVY, bold=True)
             for option_index, option in enumerate(_as_list(item.get("options"))):
-                _add_docx_bullet(doc, f"{chr(65 + option_index)}. {_plain_text(option)}", level=1)
+                _add_docx_bullet(
+                    doc,
+                    f"{chr(65 + option_index)}. {_mcq_option_text(option)}",
+                    level=1,
+                )
             _add_docx_callout(
                 doc,
                 "Answer and rationale",
@@ -763,12 +901,13 @@ def _render_quality_notes_docx(doc: Document, result: dict) -> None:
 
 
 def _pdf_styles():
+    regular_font, bold_font = _register_pdf_fonts()
     base = getSampleStyleSheet()
     return {
         "title": ParagraphStyle(
             "AcademicTitle",
             parent=base["Title"],
-            fontName="Helvetica-Bold",
+            fontName=bold_font,
             fontSize=23,
             leading=28,
             textColor=colors.HexColor(f"#{NAVY}"),
@@ -778,7 +917,7 @@ def _pdf_styles():
         "subtitle": ParagraphStyle(
             "AcademicSubtitle",
             parent=base["Normal"],
-            fontName="Helvetica",
+            fontName=regular_font,
             fontSize=9,
             leading=12,
             textColor=colors.HexColor(f"#{MUTED}"),
@@ -787,7 +926,7 @@ def _pdf_styles():
         "h1": ParagraphStyle(
             "AcademicH1",
             parent=base["Heading1"],
-            fontName="Helvetica-Bold",
+            fontName=bold_font,
             fontSize=15,
             leading=18,
             textColor=colors.black,
@@ -797,7 +936,7 @@ def _pdf_styles():
         "h2": ParagraphStyle(
             "AcademicH2",
             parent=base["Heading2"],
-            fontName="Helvetica-Bold",
+            fontName=bold_font,
             fontSize=11.5,
             leading=14,
             textColor=colors.black,
@@ -807,7 +946,7 @@ def _pdf_styles():
         "h3": ParagraphStyle(
             "AcademicH3",
             parent=base["Heading3"],
-            fontName="Helvetica-Bold",
+            fontName=bold_font,
             fontSize=10,
             leading=12,
             textColor=colors.black,
@@ -817,7 +956,7 @@ def _pdf_styles():
         "body": ParagraphStyle(
             "AcademicBody",
             parent=base["BodyText"],
-            fontName="Helvetica",
+            fontName=regular_font,
             fontSize=9.2,
             leading=12.5,
             textColor=colors.HexColor(f"#{INK}"),
@@ -826,7 +965,7 @@ def _pdf_styles():
         "small": ParagraphStyle(
             "AcademicSmall",
             parent=base["BodyText"],
-            fontName="Helvetica",
+            fontName=regular_font,
             fontSize=7.8,
             leading=10,
             textColor=colors.HexColor(f"#{MUTED}"),
@@ -834,7 +973,7 @@ def _pdf_styles():
         "bullet": ParagraphStyle(
             "AcademicBullet",
             parent=base["BodyText"],
-            fontName="Helvetica",
+            fontName=regular_font,
             fontSize=9.2,
             leading=12.5,
             leftIndent=14,
@@ -845,7 +984,7 @@ def _pdf_styles():
         "callout": ParagraphStyle(
             "AcademicCallout",
             parent=base["BodyText"],
-            fontName="Helvetica",
+            fontName=regular_font,
             fontSize=9,
             leading=12,
             textColor=colors.HexColor(f"#{INK}"),
@@ -886,7 +1025,7 @@ def _pdf_table(story: list, headers: list[str], rows: list[list[Any]], widths: l
             [
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(f"#{NAVY}")),
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTNAME", (0, 0), (-1, 0), _PDF_FONT_BOLD),
                 ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor(f"#{LINE}")),
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
                 ("LEFTPADDING", (0, 0), (-1, -1), 6),
@@ -903,13 +1042,13 @@ def _pdf_table(story: list, headers: list[str], rows: list[list[Any]], widths: l
 def _pdf_page(canvas, doc, agent_type: str):
     canvas.saveState()
     width, height = LETTER
-    canvas.setFont("Helvetica-Bold", 7.5)
+    canvas.setFont(_PDF_FONT_BOLD, 7.5)
     canvas.setFillColor(colors.HexColor(f"#{MUTED}"))
     label = "PROFESSOR AI - " + (
         "TEACHING PACKAGE" if agent_type == "teaching" else "RESEARCH SYNTHESIS"
     )
     canvas.drawString(0.82 * inch, height - 0.35 * inch, label)
-    canvas.setFont("Helvetica", 8)
+    canvas.setFont(_PDF_FONT_REGULAR, 8)
     canvas.drawRightString(width - 0.82 * inch, 0.38 * inch, f"Page {doc.page}")
     canvas.restoreState()
 
@@ -1017,7 +1156,7 @@ def _render_teaching_pdf(story: list, result: dict, styles) -> None:
     _render_teaching_assessment_pdf(story, result, styles)
     case_study = result.get("case_study")
     if isinstance(case_study, dict) and case_study:
-        story.extend([PageBreak(), _pdf_paragraph("Case Study", styles["h1"])])
+        story.extend([Spacer(1, 10), _pdf_paragraph("Case Study", styles["h1"])])
         story.append(_pdf_paragraph(case_study.get("title"), styles["h2"]))
         _pdf_callout(story, "Scenario", case_study.get("scenario"), styles, "EEF3FA")
         if case_study.get("questions"):
@@ -1093,7 +1232,8 @@ def _render_teaching_assessment_pdf(story: list, result: dict, styles) -> None:
             story.append(_pdf_paragraph(f"{index}. {_plain_text(item.get('question'))}", styles["h3"]))
             for option_index, option in enumerate(_as_list(item.get("options"))):
                 story.append(Paragraph(
-                    f"{chr(65 + option_index)}. {escape(_plain_text(option))}", styles["bullet"]
+                    f"{chr(65 + option_index)}. {escape(_mcq_option_text(option))}",
+                    styles["bullet"],
                 ))
             _pdf_callout(
                 story,
@@ -1346,12 +1486,14 @@ def _pptx_set_text(shape, text: Any, *, size: int, color: str, bold: bool = Fals
     frame = shape.text_frame
     frame.clear()
     frame.word_wrap = True
+    frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
     frame.vertical_anchor = MSO_ANCHOR.TOP
     paragraph = frame.paragraphs[0]
     paragraph.alignment = align
     run = paragraph.add_run()
-    run.text = _plain_text(text)
-    run.font.name = "Arial"
+    clean_text = _plain_text(text)
+    run.text = clean_text
+    run.font.name = "Cambria Math" if _contains_math(clean_text) else "Arial"
     run.font.size = PptxPt(size)
     run.font.bold = bold
     run.font.color.rgb = _pptx_color(color)
@@ -1366,8 +1508,10 @@ def _pptx_add_text(slide, text: Any, x, y, w, h, *, size=18, color=INK, bold=Fal
 
 
 def _pptx_add_header(slide, title: str, section: str, number: int, accent: str):
+    clean_title = _shorten(title, 105)
+    title_size = 35 if len(clean_title) <= 48 else 30 if len(clean_title) <= 76 else 25
     _pptx_add_text(slide, section.upper(), 0.65, 0.38, 4.6, 0.28, size=10, color=accent, bold=True)
-    _pptx_add_text(slide, title, 0.65, 0.72, 11.7, 0.72, size=35, color=NAVY, bold=True)
+    _pptx_add_text(slide, clean_title, 0.65, 0.72, 11.25, 0.94, size=title_size, color=NAVY, bold=True)
     _pptx_add_text(slide, f"{number:02d}", 12.15, 0.4, 0.5, 0.25, size=9, color=MUTED,
                    align=PP_ALIGN.RIGHT)
 
@@ -1376,18 +1520,32 @@ def _pptx_add_footer(slide, text: str):
     _pptx_add_text(slide, text, 0.65, 7.16, 12.0, 0.18, size=8, color=MUTED)
 
 
-def _pptx_add_bullets(slide, values: Any, x, y, w, h, *, size=19, color=INK, max_items=7):
+def _pptx_add_bullets(
+    slide,
+    values: Any,
+    x,
+    y,
+    w,
+    h,
+    *,
+    size=19,
+    color=INK,
+    max_items=7,
+    show_bullets=True,
+):
     shape = slide.shapes.add_textbox(PptxInches(x), PptxInches(y), PptxInches(w), PptxInches(h))
     frame = shape.text_frame
     frame.clear()
     frame.word_wrap = True
+    frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
     frame.margin_left = PptxInches(0.08)
     frame.margin_right = PptxInches(0.04)
     for index, value in enumerate(_as_list(values)[:max_items]):
         p = frame.paragraphs[0] if index == 0 else frame.add_paragraph()
-        p.text = _plain_text(value)
+        clean_text = _plain_text(value)
+        p.text = ("• " if show_bullets else "") + clean_text
         p.level = 0
-        p.font.name = "Arial"
+        p.font.name = "Cambria Math" if _contains_math(clean_text) else "Arial"
         p.font.size = PptxPt(size)
         p.font.color.rgb = _pptx_color(color)
         p.space_after = PptxPt(8)
@@ -1395,11 +1553,23 @@ def _pptx_add_bullets(slide, values: Any, x, y, w, h, *, size=19, color=INK, max
     return shape
 
 
-def _pptx_add_callout(slide, label: str, text: Any, x, y, w, h, accent: str):
+def _pptx_add_callout(
+    slide,
+    label: str,
+    text: Any,
+    x,
+    y,
+    w,
+    h,
+    accent: str,
+    *,
+    body_size: int = 16,
+):
     shape = slide.shapes.add_textbox(PptxInches(x), PptxInches(y), PptxInches(w), PptxInches(h))
     frame = shape.text_frame
     frame.clear()
     frame.word_wrap = True
+    frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
     frame.margin_left = PptxInches(0.16)
     frame.margin_right = PptxInches(0.14)
     frame.margin_top = PptxInches(0.11)
@@ -1413,13 +1583,16 @@ def _pptx_add_callout(slide, label: str, text: Any, x, y, w, h, accent: str):
     r.font.color.rgb = _pptx_color(accent)
     p.space_after = PptxPt(5)
     p2 = frame.add_paragraph()
-    p2.text = _plain_text(text)
-    p2.font.name = "Arial"
-    p2.font.size = PptxPt(16)
+    clean_text = _plain_text(text)
+    p2.text = clean_text
+    p2.font.name = "Cambria Math" if _contains_math(clean_text) else "Arial"
+    p2.font.size = PptxPt(body_size)
     p2.font.color.rgb = _pptx_color(INK)
     p2.line_spacing = 1.05
-    shape.fill.background()
-    shape.line.fill.background()
+    shape.fill.solid()
+    shape.fill.fore_color.rgb = _pptx_color(LIGHT)
+    shape.line.color.rgb = _pptx_color(accent)
+    shape.line.width = PptxPt(1)
     return shape
 
 
@@ -1600,7 +1773,10 @@ def _render_teaching_pptx(deck: Presentation, result: dict, accent: str):
                 continue
             _pptx_add_text(slide, f"{q_index}. {_plain_text(item.get('question'))}",
                            0.75, y, 11.8, 0.6, size=18, color=NAVY, bold=True)
-            options = [f"{chr(65+i)}. {_plain_text(v)}" for i, v in enumerate(_as_list(item.get("options")))]
+            options = [
+                f"{chr(65+i)}. {_mcq_option_text(v)}"
+                for i, v in enumerate(_as_list(item.get("options")))
+            ]
             _pptx_add_text(slide, "   ".join(options), 0.95, y + 0.58, 11.4, 0.68, size=14, color=INK)
             y += 1.65
         _pptx_add_footer(slide, "Answers and rationales are available in the professor document.")
@@ -1798,6 +1974,8 @@ def _pptx_text_pages(value: Any, *, max_chars: int = 900) -> list[str]:
 
 def _pptx_new_slide(deck, title: str, section: str, number: int, accent: str):
     slide = deck.slides.add_slide(deck.slide_layouts[6])
+    slide.background.fill.solid()
+    slide.background.fill.fore_color.rgb = _pptx_color("FBFCFE")
     _pptx_add_header(slide, title, section, number, accent)
     return slide
 
@@ -1942,7 +2120,10 @@ def _render_teaching_pptx(deck: Presentation, result: dict, accent: str):
         number += 1
         _pptx_add_text(slide, item.get("question"), 0.8, 1.5, 11.7, 0.9,
                        size=22, color=NAVY, bold=True)
-        options = [f"{chr(65 + i)}. {_plain_text(option)}" for i, option in enumerate(_as_list(item.get("options")))]
+        options = [
+            f"{chr(65 + i)}. {_mcq_option_text(option)}"
+            for i, option in enumerate(_as_list(item.get("options")))
+        ]
         _pptx_add_bullets(slide, options, 0.95, 2.55, 11.4, 2.75, size=18, max_items=4)
         answer = f"Answer: {item.get('answer')} - {_plain_text(item.get('explanation'))}"
         _pptx_add_text(slide, answer, 0.85, 5.65, 11.5, 0.78, size=15, color=MUTED)
@@ -2103,4 +2284,511 @@ def _pptx_quality_slides(deck, result: dict, number: int, accent: str) -> int:
     return _pptx_list_slides(
         deck, title="Professor Review Checklist", section="Quality Review", values=values,
         number=number, accent=accent, size=17,
+    )
+
+
+# ---------------------------------------------------------------------------
+# PPTX v3 layouts: a concise classroom/research deck, not a paginated handbook.
+# The PDF and DOCX retain the complete prose; slides surface the material a presenter needs.
+# ---------------------------------------------------------------------------
+
+
+def _pptx_complete_excerpt(value: Any, limit: int) -> str:
+    """Fit slide copy at a complete sentence boundary instead of cutting mid-sentence."""
+    text = _pptx_item_text(value).strip()
+    text = re.sub(r"(?<=[.!?]);\s+(?=[A-Z][A-Za-z /-]{1,32}:)", " ", text)
+    text = re.sub(r";\s+(?=[A-Z][A-Za-z /-]{1,32}:)", ". ", text)
+    if len(text) <= limit:
+        return text
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    selected: list[str] = []
+    used = 0
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+        candidate_length = used + len(sentence) + (1 if selected else 0)
+        if selected and candidate_length > limit:
+            break
+        selected.append(sentence)
+        used = candidate_length
+        if used >= limit:
+            break
+    # A single long sentence is safer than a clipped fragment; callout auto-fit handles it.
+    return " ".join(selected or sentences[:1]).strip()
+
+
+def _pptx_estimated_lines(text: Any, width: float, font_size: int) -> int:
+    clean_text = _plain_text(text)
+    if not clean_text:
+        return 0
+    usable_width = max(0.5, width - 0.34)
+    average_character_width = max(0.07, font_size * 0.52 / 72)
+    characters_per_line = max(12, int(usable_width / average_character_width))
+    return sum(
+        max(1, (len(line.strip()) + characters_per_line - 1) // characters_per_line)
+        for line in clean_text.splitlines() or [clean_text]
+    )
+
+
+def _pptx_callout_height(
+    text: Any,
+    width: float,
+    *,
+    body_size: int = 16,
+    minimum: float = 0.82,
+    maximum: float = 3.5,
+) -> float:
+    body_lines = _pptx_estimated_lines(text, width, body_size)
+    natural = 0.42 + body_lines * (body_size * 1.13 / 72)
+    return min(maximum, max(minimum, natural))
+
+
+def _pptx_compact_values(values: Any, *, item_limit: int = 150) -> list[str]:
+    return [
+        _pptx_complete_excerpt(value, item_limit)
+        for value in _as_list(values)
+        if _plain_text(value)
+    ]
+
+
+def _pptx_compact_list_slides(
+    deck,
+    *,
+    title: str,
+    section: str,
+    values: Any,
+    number: int,
+    accent: str,
+    max_items: int = 6,
+    item_limit: int = 150,
+    size: int = 19,
+    footer: str = "",
+) -> int:
+    compact = _pptx_compact_values(values, item_limit=item_limit)
+    pages = [compact[index:index + max_items] for index in range(0, len(compact), max_items)]
+    for page_index, page in enumerate(pages, start=1):
+        page_title = title if len(pages) == 1 else f"{title} ({page_index} of {len(pages)})"
+        slide = _pptx_new_slide(deck, page_title, section, number, accent)
+        number += 1
+        _pptx_add_bullets(slide, page, 0.82, 1.82, 11.7, 4.95, size=size, max_items=len(page))
+        if footer:
+            _pptx_add_footer(slide, footer)
+    return number
+
+
+def _pptx_section_slide(deck, section_item: dict, number: int, accent: str) -> int:
+    title = _plain_text(section_item.get("title"), "Lecture Section")
+    content = section_item.get("content") if isinstance(section_item.get("content"), dict) else {}
+    slide = _pptx_new_slide(
+        deck, title, f"{section_item.get('minutes', '')} minutes", number, accent
+    )
+    explanation = _pptx_complete_excerpt(content.get("explanation"), 320)
+    if explanation:
+        _pptx_add_text(slide, explanation, 0.76, 1.72, 11.75, 0.82, size=16, color=MUTED)
+    _pptx_add_text(slide, "Key teaching points", 0.76, 2.68, 5.7, 0.35,
+                   size=22, color=NAVY, bold=True)
+    points = _pptx_compact_values(content.get("key_points"), item_limit=90)[:4]
+    _pptx_add_bullets(slide, points, 0.76, 3.12, 5.85, 3.0, size=16, max_items=4)
+
+    worked = content.get("worked_example") or content.get("worked_examples")
+    application = _pptx_complete_excerpt(
+        worked or content.get("classroom_activity") or content.get("concept_check"), 430
+    )
+    professor_note = _pptx_complete_excerpt(
+        content.get("teaching_tip") or content.get("common_errors"), 320
+    )
+    right_x = 6.9
+    right_width = 5.7
+    top = 2.62
+    bottom = 6.35
+    gap = 0.18
+    if application and professor_note:
+        application_height = _pptx_callout_height(
+            application, right_width, body_size=15, minimum=1.35, maximum=2.35
+        )
+        note_height = _pptx_callout_height(
+            professor_note, right_width, body_size=15, minimum=1.05, maximum=1.85
+        )
+        available = bottom - top - gap
+        total = application_height + note_height
+        if total > available:
+            scale = available / total
+            application_height *= scale
+            note_height *= scale
+        _pptx_add_callout(
+            slide,
+            "Application",
+            application,
+            right_x,
+            top,
+            right_width,
+            application_height,
+            accent,
+            body_size=15,
+        )
+        _pptx_add_callout(
+            slide,
+            "Professor note",
+            professor_note,
+            right_x,
+            top + application_height + gap,
+            right_width,
+            note_height,
+            accent,
+            body_size=15,
+        )
+    else:
+        single_text = application or professor_note
+        if single_text:
+            label = "Application" if application else "Professor note"
+            height = _pptx_callout_height(
+                single_text, right_width, body_size=15, minimum=1.05, maximum=bottom - top
+            )
+            _pptx_add_callout(
+                slide, label, single_text, right_x, top, right_width, height, accent,
+                body_size=15,
+            )
+    refs = _as_list(content.get("source_refs"))
+    if refs:
+        _pptx_add_footer(slide, "Sources: " + "; ".join(map(_plain_text, refs)))
+    return number + 1
+
+
+def _pptx_mcq_slide(deck, item: dict, index: int, number: int, accent: str) -> int:
+    slide = _pptx_new_slide(deck, f"Knowledge Check {index}", "Assessment", number, accent)
+    question = _pptx_complete_excerpt(item.get("question"), 260)
+    question_height = min(
+        1.25,
+        max(0.62, _pptx_estimated_lines(question, 11.75, 20) * 0.34),
+    )
+    _pptx_add_text(slide, question, 0.78, 1.65, 11.75, question_height,
+                   size=20, color=NAVY, bold=True)
+    options = [
+        f"{chr(65 + option_index)}. "
+        f"{_pptx_complete_excerpt(_mcq_option_text(option), 220)}"
+        for option_index, option in enumerate(_as_list(item.get("options"))[:4])
+    ]
+    answer = (
+        f"Answer: {item.get('answer')}  "
+        f"{_pptx_complete_excerpt(item.get('explanation'), 380)}"
+    )
+    answer_height = _pptx_callout_height(
+        answer, 11.75, body_size=15, minimum=0.92, maximum=1.45
+    )
+    answer_y = 6.72 - answer_height
+    options_y = 1.65 + question_height + 0.18
+    options_height = max(1.65, answer_y - options_y - 0.25)
+    _pptx_add_bullets(
+        slide,
+        options,
+        0.88,
+        options_y,
+        11.45,
+        options_height,
+        size=17,
+        max_items=4,
+        show_bullets=False,
+    )
+    _pptx_add_callout(
+        slide,
+        "Answer and rationale",
+        answer,
+        0.78,
+        answer_y,
+        11.75,
+        answer_height,
+        accent,
+        body_size=15,
+    )
+    return number + 1
+
+
+def _render_teaching_pptx(deck: Presentation, result: dict, accent: str):
+    number = 2
+    overview = result.get("overview") if isinstance(result.get("overview"), dict) else {}
+    slide = _pptx_new_slide(deck, "Session Overview", "Teaching Package", number, accent)
+    number += 1
+    _pptx_add_callout(slide, "Lesson purpose", _pptx_complete_excerpt(overview.get("lesson_purpose"), 420),
+                      0.72, 1.75, 7.45, 1.82, accent)
+    details = [
+        f"Course: {_plain_text(overview.get('course'), 'General')}",
+        f"Audience: {_plain_text(overview.get('audience'), 'University students')}",
+        f"Duration: {overview.get('duration_minutes', '')} minutes",
+        f"Difficulty: {_plain_text(overview.get('difficulty'), 'intermediate')}",
+    ]
+    _pptx_add_bullets(slide, details, 8.55, 1.8, 3.75, 1.9, size=17, max_items=4)
+    _pptx_add_text(slide, "Prerequisite knowledge", 0.76, 4.02, 5.7, 0.35,
+                   size=22, color=NAVY, bold=True)
+    _pptx_add_bullets(slide, _pptx_compact_values(overview.get("prerequisite_knowledge"), item_limit=80)[:3],
+                      0.76, 4.45, 5.7, 1.75, size=16, max_items=3)
+    _pptx_add_text(slide, "Evidence base", 6.82, 4.02, 5.5, 0.35,
+                   size=22, color=NAVY, bold=True)
+    _pptx_add_bullets(slide, _pptx_compact_values(overview.get("evidence_base"), item_limit=85)[:3],
+                      6.82, 4.45, 5.55, 1.75, size=15, max_items=3)
+
+    objectives = [
+        f"{item.get('id')}: {_pptx_complete_excerpt(item.get('objective'), 145)} "
+        f"[{item.get('bloom_level')}]"
+        if isinstance(item, dict) else _pptx_complete_excerpt(item, 160)
+        for item in _as_list(result.get("learning_objectives"))
+    ]
+    number = _pptx_compact_list_slides(
+        deck, title="Learning Objectives", section="Teaching Package", values=objectives,
+        number=number, accent=accent, max_items=6, size=18,
+        footer="Each objective is mapped to an assessment.",
+    )
+    sections = [item for item in _as_list(result.get("lecture_sections")) if isinstance(item, dict)]
+    roadmap = [
+        f"{item.get('minutes', '')} min - {_pptx_complete_excerpt(item.get('title'), 115)}"
+        for item in sections
+    ]
+    number = _pptx_compact_list_slides(
+        deck, title="Session Roadmap", section="Teaching Package", values=roadmap,
+        number=number, accent=accent, max_items=7, item_limit=140, size=18,
+    )
+    for section_item in sections:
+        number = _pptx_section_slide(deck, section_item, number, accent)
+
+    number = _pptx_compact_list_slides(
+        deck, title="Core Formula Sheet", section="Reference",
+        values=overview.get("core_formulas"), number=number, accent=accent,
+        max_items=6, item_limit=155, size=18,
+    )
+
+    case_study = result.get("case_study")
+    if isinstance(case_study, dict) and case_study:
+        slide = _pptx_new_slide(
+            deck, _plain_text(case_study.get("title"), "Applied Case"), "Case Study", number, accent
+        )
+        number += 1
+        _pptx_add_callout(slide, "Scenario", _pptx_complete_excerpt(case_study.get("scenario"), 560),
+                          0.72, 1.78, 7.35, 4.35, accent)
+        _pptx_add_text(slide, "Case questions", 8.35, 1.82, 4.0, 0.4,
+                       size=22, color=NAVY, bold=True)
+        _pptx_add_bullets(
+            slide, _pptx_compact_values(case_study.get("questions"), item_limit=125)[:5],
+            8.35, 2.35, 4.0, 3.55, size=16, max_items=5,
+        )
+
+    number = _pptx_compact_list_slides(
+        deck, title="Discussion Questions", section="Student Engagement",
+        values=result.get("discussion_questions"), number=number, accent=accent,
+        max_items=6, item_limit=150, size=18,
+    )
+    for index, item in enumerate(_as_list(result.get("mcqs")), start=1):
+        if isinstance(item, dict):
+            number = _pptx_mcq_slide(deck, item, index, number, accent)
+
+    for item in _as_list(result.get("assignments")):
+        if not isinstance(item, dict):
+            continue
+        slide = _pptx_new_slide(deck, _plain_text(item.get("title"), "Assignment"),
+                                "Assignment", number, accent)
+        number += 1
+        _pptx_add_callout(slide, "Task", _pptx_complete_excerpt(item.get("prompt"), 520),
+                          0.72, 1.78, 7.35, 3.9, accent)
+        criteria = []
+        for criterion in _as_list(item.get("rubric")):
+            if isinstance(criterion, dict):
+                criteria.append(
+                    f"{criterion.get('criterion')} ({criterion.get('weight_percent')}%): "
+                    f"{_pptx_complete_excerpt(criterion.get('description'), 95)}"
+                )
+        _pptx_add_text(slide, "Assessment criteria", 8.35, 1.82, 4.0, 0.4,
+                       size=22, color=NAVY, bold=True)
+        _pptx_add_bullets(slide, criteria[:5], 8.35, 2.35, 4.0, 3.5, size=16, max_items=5)
+
+    for index, item in enumerate(_as_list(result.get("numerical_problems")), start=1):
+        if not isinstance(item, dict):
+            continue
+        slide = _pptx_new_slide(deck, f"Numerical Problem {index}", "Assessment", number, accent)
+        number += 1
+        problem_text = _pptx_complete_excerpt(item.get("problem"), 420)
+        given_text = _pptx_complete_excerpt(item.get("given"), 320)
+        prompt = problem_text + (f"\n\nGiven: {given_text}" if given_text else "")
+        problem_height = _pptx_callout_height(
+            prompt, 11.85, body_size=15, minimum=1.05, maximum=2.35
+        )
+        _pptx_add_callout(
+            slide,
+            "Problem",
+            prompt,
+            0.72,
+            1.72,
+            11.85,
+            problem_height,
+            accent,
+            body_size=15,
+        )
+        steps = [f"{i}. {_pptx_complete_excerpt(step, 185)}" for i, step in enumerate(
+            _as_list(item.get("solution_steps"))[:6], start=1
+        )]
+        solution_y = 1.72 + problem_height + 0.28
+        _pptx_add_text(slide, "Solution", 0.76, solution_y, 7.35, 0.35,
+                       size=21, color=NAVY, bold=True)
+        answer = _pptx_complete_excerpt(item.get("final_answer"), 280)
+        answer_height = _pptx_callout_height(
+            answer, 4.1, body_size=16, minimum=0.88, maximum=1.45
+        )
+        body_y = solution_y + 0.43
+        body_height = max(1.55, 6.45 - body_y)
+        _pptx_add_bullets(
+            slide,
+            steps,
+            0.76,
+            body_y,
+            7.35,
+            body_height,
+            size=16,
+            max_items=6,
+            show_bullets=False,
+        )
+        _pptx_add_callout(
+            slide,
+            "Final answer",
+            answer,
+            8.45,
+            solution_y,
+            4.1,
+            answer_height,
+            accent,
+        )
+
+    number = _pptx_compact_list_slides(
+        deck, title="Bloom's Taxonomy Mapping", section="Assessment",
+        values=result.get("bloom_mapping"), number=number, accent=accent,
+        max_items=6, item_limit=145, size=17,
+    )
+    number = _pptx_compact_list_slides(
+        deck, title="Viva Questions", section="Assessment", values=result.get("viva_questions"),
+        number=number, accent=accent, max_items=5, item_limit=180, size=17,
+    )
+    number = _pptx_quality_slides(deck, result, number, accent)
+    _pptx_sources_slide(deck, result, number, accent)
+
+
+def _render_research_pptx(deck: Presentation, result: dict, accent: str):
+    number = 2
+    scope = result.get("scope") if isinstance(result.get("scope"), dict) else {}
+    scope_values = [
+        f"Discipline: {_plain_text(scope.get('discipline'))}",
+        f"Problem statement: {_pptx_complete_excerpt(scope.get('problem_statement'), 260)}",
+        *[
+            f"Included: {_pptx_complete_excerpt(value, 150)}"
+            for value in _as_list(scope.get("inclusion_boundaries"))
+        ],
+        *[
+            f"Excluded: {_pptx_complete_excerpt(value, 150)}"
+            for value in _as_list(scope.get("exclusion_boundaries"))
+        ],
+    ]
+    number = _pptx_compact_list_slides(
+        deck, title="Research Scope", section="Research Synthesis", values=scope_values,
+        number=number, accent=accent, max_items=6, item_limit=280, size=18,
+    )
+
+    summary = result.get("executive_summary")
+    if isinstance(summary, dict):
+        slide = _pptx_new_slide(deck, "Executive Summary", "Research Synthesis", number, accent)
+        number += 1
+        _pptx_add_callout(slide, "Evidence", _pptx_complete_excerpt(summary.get("evidence"), 500),
+                          0.72, 1.78, 7.35, 2.1, accent)
+        _pptx_add_callout(slide, "Interpretation", _pptx_complete_excerpt(summary.get("inference"), 360),
+                          8.35, 1.78, 4.2, 2.1, accent)
+        _pptx_add_callout(slide, "Limitations", _pptx_complete_excerpt(summary.get("limitations"), 520),
+                          0.72, 4.2, 11.83, 1.65, accent)
+
+    for item in _as_list(result.get("themes")):
+        if not isinstance(item, dict):
+            continue
+        synthesis = item.get("synthesis") if isinstance(item.get("synthesis"), dict) else {}
+        slide = _pptx_new_slide(deck, _plain_text(item.get("theme"), "Research Theme"),
+                                "Thematic Synthesis", number, accent)
+        number += 1
+        evidence = item.get("evidence") or synthesis.get("evidence")
+        _pptx_add_callout(slide, "Evidence", _pptx_complete_excerpt(evidence, 560),
+                          0.72, 1.78, 7.35, 3.9, accent)
+        _pptx_add_callout(slide, "Interpretation", _pptx_complete_excerpt(synthesis.get("inference"), 420),
+                          8.35, 1.78, 4.2, 3.9, accent)
+
+    number = _pptx_compact_list_slides(
+        deck, title="Methodology Comparison", section="Research Design",
+        values=result.get("methodology_comparison"), number=number, accent=accent,
+        max_items=4, item_limit=260, size=17,
+    )
+    for item in _as_list(result.get("research_gaps")):
+        if not isinstance(item, dict):
+            continue
+        slide = _pptx_new_slide(deck, _plain_text(item.get("gap"), "Research Gap"),
+                                "Research Gaps", number, accent)
+        number += 1
+        _pptx_add_callout(slide, "Evidence", _pptx_complete_excerpt(item.get("evidence"), 520),
+                          0.72, 1.78, 7.35, 3.7, accent)
+        implication = (
+            f"{_pptx_complete_excerpt(item.get('inference'), 340)}\n\nConfidence: "
+            f"{_plain_text(item.get('confidence'))}"
+        )
+        _pptx_add_callout(slide, "Research implication", implication,
+                          8.35, 1.78, 4.2, 3.7, accent)
+
+    number = _pptx_compact_list_slides(
+        deck, title="Proposed Research Questions", section="Research Direction",
+        values=result.get("research_questions"), number=number, accent=accent,
+        max_items=4, item_limit=230, size=17,
+    )
+    number = _pptx_compact_list_slides(
+        deck, title="Future Research Scope", section="Research Direction",
+        values=result.get("future_scope"), number=number, accent=accent,
+        max_items=5, item_limit=210, size=17,
+    )
+    number = _pptx_compact_list_slides(
+        deck, title="Methodology Recommendations", section="Research Design",
+        values=result.get("methodology_suggestions"), number=number, accent=accent,
+        max_items=4, item_limit=260, size=17,
+    )
+    number = _pptx_quality_slides(deck, result, number, accent)
+    _pptx_sources_slide(deck, result, number, accent)
+
+
+def _pptx_quality_slides(deck, result: dict, number: int, accent: str) -> int:
+    notes = result.get("quality_notes")
+    if not isinstance(notes, dict):
+        return number
+    values = [
+        *[
+            f"Limitation: {_pptx_complete_excerpt(value, 150)}"
+            for value in _as_list(notes.get("limitations"))
+        ],
+        *[
+            f"Unverified claim: {_pptx_complete_excerpt(value, 150)}"
+            for value in _as_list(notes.get("unverified_claims"))
+        ],
+        *[
+            f"Review priority: {_pptx_complete_excerpt(value, 150)}"
+            for value in _as_list(notes.get("review_priorities"))
+        ],
+    ]
+    return _pptx_compact_list_slides(
+        deck, title="Professor Review Checklist", section="Quality Review", values=values,
+        number=number, accent=accent, max_items=6, item_limit=170, size=17,
+    )
+
+
+def _pptx_sources_slide(deck: Presentation, result: dict, number: int, accent: str):
+    references = _as_list(result.get("apa_references"))
+    sources = _as_list(result.get("sources"))
+    values = references or [
+        (
+            _plain_text(item.get("title"), "Source")
+            + (f" ({_plain_text(item.get('year'))})" if item.get("year") else "")
+            + (f" - {_clean_url(_plain_text(item.get('url')))}" if item.get("url") else "")
+        )
+        if isinstance(item, dict) else _plain_text(item)
+        for item in sources
+    ]
+    _pptx_compact_list_slides(
+        deck, title="Sources and Further Reading", section="References", values=values,
+        number=number, accent=accent, max_items=5, item_limit=210, size=15,
+        footer="Verify citation details before academic publication or distribution.",
     )

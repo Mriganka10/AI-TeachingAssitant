@@ -331,6 +331,7 @@ $("#upload-form").onsubmit = async (event) => {
 async function run(url, payload) {
   $("#output").classList.remove("hidden");
   $("#loader").classList.remove("hidden");
+  $("#output-title").textContent = "Preparing your academic material";
   $("#result").textContent = "Your specialist agent is working...";
   $("#downloads").innerHTML = "";
   $("#output").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -341,10 +342,19 @@ async function run(url, payload) {
     if (data.status === "failed") {
       throw new Error(data.error || "Agent generation failed. Please retry.");
     }
+    if (data.status === "artifact_failed") {
+      $("#output-title").textContent = "Your content is ready";
+      $("#result").textContent = JSON.stringify(data.result, null, 2);
+      $("#downloads").innerHTML = `<span class="export-error">${escapeHtml(data.error || "Document export failed. Please retry.")}</span>`;
+      await loadDashboard();
+      return;
+    }
+    $("#output-title").textContent = "Your material and downloads are ready";
     $("#result").textContent = JSON.stringify(data.result, null, 2);
     $("#downloads").innerHTML = renderDownloads(data.artifacts || []);
     await loadDashboard();
   } catch (error) {
+    $("#output-title").textContent = "The agent could not complete this request";
     $("#result").textContent = error.message;
   } finally {
     $("#loader").classList.add("hidden");
@@ -361,17 +371,25 @@ async function waitForJob(jobId) {
   if (!jobId) {
     throw new Error("The server did not return a job id. Please retry.");
   }
-  const maxAttempts = 90;
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+  const startedAt = Date.now();
+  let contentDisplayed = false;
+  for (;;) {
     const job = await api(`/api/jobs/${jobId}`);
-    if (job.status === "completed" || job.status === "failed") {
+    if (["completed", "failed", "artifact_failed"].includes(job.status)) {
       return job;
     }
-    const elapsed = Math.max(1, attempt + 1) * 2;
-    $("#result").textContent = `Still working... generating documents and citations (${elapsed}s elapsed).`;
+
+    if (job.result && job.status === "content_ready") {
+      $("#output-title").textContent = "Your content is ready - preparing downloads";
+      $("#result").textContent = JSON.stringify(job.result, null, 2);
+      $("#downloads").innerHTML = '<span class="export-progress">Generating DOCX, PDF, and PPTX files...</span>';
+      contentDisplayed = true;
+    } else if (!contentDisplayed) {
+      const elapsed = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+      $("#result").textContent = `Still working... generating and validating academic content (${elapsed}s elapsed).`;
+    }
     await sleep(2000);
   }
-  throw new Error("The agent is still running. Please check Recent Faculty Work in a minute.");
 }
 
 function sleep(ms) {

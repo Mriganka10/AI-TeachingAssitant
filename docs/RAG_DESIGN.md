@@ -47,9 +47,11 @@ The retriever:
 1. filters documents by authenticated tenant
 2. optionally filters by collection
 3. considers up to 250 recent documents
-4. scores documents by occurrences of meaningful query terms
-5. selects up to 12 documents
-6. limits each excerpt and total context size
+4. splits extracted text into overlapping chunks
+5. ranks chunks with word-and-bigram TF-IDF cosine similarity, with a dependency-safe lexical fallback
+6. limits the number of chunks from any one document so a single source cannot dominate context
+7. emits stable source and excerpt identifiers for grounded model references
+8. limits each excerpt and total context size
 
 Limits are controlled by `MAX_CONTEXT_CHARS`.
 
@@ -65,10 +67,9 @@ Artifact and download queries are also tenant-scoped.
 
 ## Current Limitations
 
-- Retrieval is document-level, not chunk-level.
 - Ranking is lexical and does not understand synonyms.
 - No vector embeddings are stored.
-- No reranking or citation verification exists.
+- No semantic reranking or external citation verification exists.
 - Large PDFs can exceed useful model context even with bounding.
 - Scanned PDFs require OCR configuration. Local development can use Tesseract/PyMuPDF, while AWS
   production should use Amazon Textract when OCR is enabled.

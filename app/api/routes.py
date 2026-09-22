@@ -264,29 +264,44 @@ def run_agent_job(job_id: str) -> None:
         payload = job.request_payload
         tenant_id = job.tenant_id
         actor_email = job.created_by
-        system_prompt = TEACHING_SYSTEM if agent_type == "teaching" else RESEARCH_SYSTEM
-        query = " ".join(
-            str(value)
-            for value in (
-                payload.get("topic") or payload.get("research_topic", ""),
-                payload.get("course") or payload.get("discipline", ""),
-                payload.get("instructions", ""),
+
+        # A worker may be restarted after the validated content was committed but before all
+        # exports were written. Reuse that content instead of paying for and waiting on a second
+        # model request.
+        if job.result_payload:
+            result = job.result_payload
+            model = job.model or settings.openai_model
+        else:
+            system_prompt = TEACHING_SYSTEM if agent_type == "teaching" else RESEARCH_SYSTEM
+            query = " ".join(
+                str(value)
+                for value in (
+                    payload.get("topic") or payload.get("research_topic", ""),
+                    payload.get("course") or payload.get("discipline", ""),
+                    payload.get("instructions", ""),
+                )
+                if value
             )
-            if value
-        )
-        contexts = retrieve_context(
-            db,
-            tenant_id=tenant_id,
-            query=query,
-            collections=payload.get("collections", []),
-        )
-        model_payload = {**payload, "uploaded_context": contexts}
-        result, model = llm.generate(
-            agent_type=agent_type,
-            system=system_prompt,
-            payload=model_payload,
-            use_web_search=payload.get("use_web_search", False),
-        )
+            contexts = retrieve_context(
+                db,
+                tenant_id=tenant_id,
+                query=query,
+                collections=payload.get("collections", []),
+            )
+            model_payload = {**payload, "uploaded_context": contexts}
+            result, model = llm.generate(
+                agent_type=agent_type,
+                system=system_prompt,
+                payload=model_payload,
+                use_web_search=payload.get("use_web_search", False),
+            )
+            # Make validated content available to the browser before DOCX, PDF, and PPTX export.
+            job.result_payload = result
+            job.model = model
+            job.status = "content_ready"
+            job.error_message = None
+            db.commit()
+
         paths = create_artifacts(
             result,
             agent_type=agent_type,
@@ -311,8 +326,6 @@ def run_agent_job(job_id: str) -> None:
             )
             artifacts.append(artifact)
         job.status = "completed"
-        job.result_payload = result
-        job.model = model
         job.completed_at = datetime.now(UTC)
         db.commit()
         audit(
@@ -330,15 +343,21 @@ def run_agent_job(job_id: str) -> None:
         job = db.get(AgentJob, job_id)
         if not job:
             return
-        job.status = "failed"
-        job.error_message = str(exc)[:2000]
+        content_was_generated = bool(job.result_payload)
+        job.status = "artifact_failed" if content_was_generated else "failed"
+        prefix = "Content was generated, but document export failed: " if content_was_generated else ""
+        job.error_message = (prefix + str(exc))[:2000]
         job.completed_at = datetime.now(UTC)
         db.commit()
         audit(
             db,
             tenant_id=tenant_id,
             actor_email=job.created_by,
-            event_type=f"agent.{job.agent_type}.failed",
+            event_type=(
+                f"agent.{job.agent_type}.artifact_failed"
+                if content_was_generated
+                else f"agent.{job.agent_type}.failed"
+            ),
             status="failed",
             entity_type="job",
             entity_id=job.id,
@@ -349,18 +368,16 @@ def run_agent_job(job_id: str) -> None:
 
 
 def _serialize_job(db: Session, job: AgentJob, *, include_result: bool = True) -> dict:
-    artifacts = []
-    if job.status == "completed":
-        artifacts = db.scalars(
-            select(Artifact)
-            .where(Artifact.job_id == job.id, Artifact.tenant_id == job.tenant_id)
-            .order_by(Artifact.created_at.asc())
-        ).all()
+    artifacts = db.scalars(
+        select(Artifact)
+        .where(Artifact.job_id == job.id, Artifact.tenant_id == job.tenant_id)
+        .order_by(Artifact.created_at.asc())
+    ).all()
     response = {
         "job_id": job.id,
         "status": job.status,
-        "result": job.result_payload if include_result and job.status == "completed" else None,
-        "error": job.error_message if job.status == "failed" else None,
+        "result": job.result_payload if include_result else None,
+        "error": job.error_message if job.status in {"failed", "artifact_failed"} else None,
         "artifacts": [
             {"id": item.id, "filename": item.filename, "type": item.artifact_type}
             for item in artifacts

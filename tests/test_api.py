@@ -5,6 +5,8 @@ from fastapi.testclient import TestClient
 from app.api import routes
 from app.core.auth import auth_service
 from app.core.config import settings
+from app.core.database import SessionLocal
+from app.core.models import AgentJob
 from app.main import app
 
 
@@ -167,6 +169,53 @@ def test_agent_failure_returns_json_detail(monkeypatch) -> None:
     assert failed_job.json()["error"] == "simulated upstream failure"
 
 
+def test_validated_content_is_committed_before_artifact_generation(monkeypatch) -> None:
+    observed: dict = {}
+
+    def inspect_content_checkpoint(result, *, agent_type, output_dir):
+        with SessionLocal() as db:
+            job = db.get(AgentJob, output_dir.name)
+            observed["status"] = job.status
+            observed["result"] = job.result_payload
+            observed["model"] = job.model
+        return []
+
+    monkeypatch.setattr(routes, "create_artifacts", inspect_content_checkpoint)
+
+    with TestClient(app) as client:
+        login(client)
+        response = client.post(
+            "/api/agents/teaching",
+            json={"topic": "Progressive results", "use_web_search": False},
+        )
+        completed = client.get(f"/api/jobs/{response.json()['job_id']}").json()
+
+    assert observed["status"] == "content_ready"
+    assert observed["result"]["title"] == "Progressive results"
+    assert observed["model"] == "mock"
+    assert completed["status"] == "completed"
+    assert completed["result"]["title"] == "Progressive results"
+
+
+def test_artifact_failure_preserves_generated_content(monkeypatch) -> None:
+    def fail_artifacts(*args, **kwargs):
+        raise RuntimeError("simulated export failure")
+
+    monkeypatch.setattr(routes, "create_artifacts", fail_artifacts)
+
+    with TestClient(app) as client:
+        login(client)
+        response = client.post(
+            "/api/agents/research",
+            json={"research_topic": "Durable content", "use_web_search": False},
+        )
+        job = client.get(f"/api/jobs/{response.json()['job_id']}").json()
+
+    assert job["status"] == "artifact_failed"
+    assert job["result"]["research_gaps"]
+    assert "Content was generated, but document export failed" in job["error"]
+
+
 def test_frontend_handles_non_json_api_responses() -> None:
     script = Path("app/static/app.js").read_text()
 
@@ -175,6 +224,8 @@ def test_frontend_handles_non_json_api_responses() -> None:
     assert "HTML page instead of agent data" in script
     assert "waitForJob" in script
     assert "/api/jobs/" in script
+    assert 'job.status === "content_ready"' in script
+    assert "maxAttempts" not in script
 
 
 def test_sqs_backend_enqueues_existing_job_without_running_inline(monkeypatch) -> None:

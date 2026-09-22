@@ -6,7 +6,9 @@ The model is selected through:
 
 ```text
 OPENAI_MODEL=gpt-5.5
-OPENAI_REASONING_EFFORT=medium
+OPENAI_REASONING_EFFORT=low
+OPENAI_TEXT_VERBOSITY=high
+OPENAI_PROMPT_CACHE_RETENTION=
 ```
 
 Both specialist agents currently share the configured OpenAI model. They differ through their
@@ -36,6 +38,8 @@ system prompts, input schemas, selected source collections, and output requireme
 - retrieved uploaded context
 - optional `web_search`
 - reasoning effort for GPT-5-family models
+- a stable prompt-cache key for repeated agent contracts
+- an optional service tier selected with `OPENAI_SERVICE_TIER`
 - a strict agent-specific JSON Schema through Responses API structured outputs
 - explicit output verbosity and a bounded output-token budget
 
@@ -44,13 +48,32 @@ timing, assessment-to-objective links, rubric totals, source identifiers, and ev
 gaps. A failed validation receives one bounded repair attempt; an invalid result is never silently
 accepted.
 
+The default reasoning effort is `low` because these are latency-sensitive, schema-constrained
+generation tasks. Required fields, citation rules, teaching duration, assessment mappings, and
+rubric totals remain protected by the same structured-output contract and semantic validator.
+Set `OPENAI_REASONING_EFFORT=medium` only when representative evaluations show a meaningful quality
+gain. Accounts with Priority processing enabled can set `OPENAI_SERVICE_TIER=priority`; leaving it
+blank retains the account's normal processing tier. Prompt caching is automatic for eligible
+requests; projects that support extended caching may additionally set
+`OPENAI_PROMPT_CACHE_RETENTION=24h`.
+
 ## Execution Pattern
 
 Agent requests are queued as `AgentJob` rows and executed by the SQS-backed ECS worker in
 production. The local profile can execute them as FastAPI background tasks. The API
 returns a `job_id` immediately; the UI polls `GET /api/jobs/{job_id}` until structured output and
 downloadable artifacts are ready. This keeps long OpenAI and document-generation work away from
-the original browser request.
+the original browser request. After validated JSON is committed, DOCX, PDF, and PPTX exporters run
+in parallel because they write independent files. The browser can display content while those
+downloads finish.
+
+The presentation is intentionally a concise teaching or research deck. Full prose remains in the
+DOCX, PDF, and JSON outputs. Slide layouts summarize long explanations, preserve assessments and
+source lists, clean Markdown links, and paginate only when content cannot fit at presentation size.
+PPTX callouts use consistent visual grouping, MCQ labels are normalized across every exporter, and
+mathematical notation is rendered with Unicode-capable fonts in PDF, DOCX, and PPTX outputs.
+Callout heights, answer areas, and numerical-problem regions are calculated from their content;
+PowerPoint text fitting remains enabled as a final safeguard against clipping and overlap.
 
 ## Mode Selection
 

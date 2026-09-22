@@ -64,6 +64,7 @@ class LLMService:
             "instructions": system,
             "input": json.dumps(payload, ensure_ascii=False),
             "max_output_tokens": settings.openai_max_output_tokens,
+            "prompt_cache_key": f"professor-ai:{agent_type}:structured-v2",
             "store": False,
             "text": {
                 "verbosity": settings.openai_text_verbosity,
@@ -77,6 +78,10 @@ class LLMService:
         }
         if use_web_search:
             kwargs["tools"] = [{"type": "web_search"}]
+        if settings.openai_service_tier:
+            kwargs["service_tier"] = settings.openai_service_tier
+        if settings.openai_prompt_cache_retention:
+            kwargs["prompt_cache_retention"] = settings.openai_prompt_cache_retention
         if settings.openai_model.startswith("gpt-5"):
             kwargs["reasoning"] = {"effort": settings.openai_reasoning_effort}
         response = client.responses.create(**kwargs)
