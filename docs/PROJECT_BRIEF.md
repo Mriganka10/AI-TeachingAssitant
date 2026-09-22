@@ -66,12 +66,12 @@ Given a research topic and uploaded papers, the agent can produce:
 - Teaching output is downloadable as JSON, DOCX, PDF, and PPTX.
 - Research output is downloadable as JSON, DOCX, PDF, and PPTX.
 - Agent jobs, artifacts, and security events are traceable.
-- The same code runs locally and on AWS Elastic Beanstalk.
+- The same image supports local execution and isolated ECS web/worker services in AWS.
 
 ## Current Boundaries
 
-- Agent execution uses an in-app asynchronous job flow with job polling. Durable queue workers
-  such as SQS/Celery/RQ are still recommended before high-concurrency production scale.
+- Agent execution uses job polling and a durable SQS/ECS worker in production, with a lightweight
+  background fallback for local development.
 - Retrieval is bounded lexical ranking rather than vector search.
 - PDF extraction supports text PDFs and can use local OCR or Amazon Textract for scanned PDFs when
   OCR is configured.

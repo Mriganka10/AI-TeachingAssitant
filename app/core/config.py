@@ -18,7 +18,12 @@ class Settings(BaseSettings):
 
     openai_api_key: str | None = None
     openai_model: str = "gpt-5.5"
-    openai_reasoning_effort: str = "medium"
+    openai_reasoning_effort: str = "low"
+    openai_text_verbosity: str = "high"
+    openai_max_output_tokens: int = 24_000
+    openai_service_tier: str | None = None
+    openai_prompt_cache_retention: str | None = None
+    llm_repair_attempts: int = 1
     llm_service_mode: str = "openai"
 
     auth_enabled: bool = True
@@ -44,6 +49,10 @@ class Settings(BaseSettings):
     aws_region: str = "ap-south-1"
     max_upload_mb: int = 50
     max_context_chars: int = 120_000
+    agent_execution_backend: str = "background"
+    agent_queue_url: str | None = None
+    agent_queue_wait_seconds: int = 20
+    agent_queue_visibility_timeout_seconds: int = 900
     ocr_enabled: bool = True
     ocr_provider: str = "local"
     ocr_language: str = "eng"
@@ -69,6 +78,10 @@ class Settings(BaseSettings):
     @property
     def is_postgresql(self) -> bool:
         return self.database_url.startswith("postgresql+psycopg://")
+
+    @property
+    def uses_sqs_agent_queue(self) -> bool:
+        return self.agent_execution_backend.lower() == "sqs"
 
     @property
     def resolved_ses_region(self) -> str:

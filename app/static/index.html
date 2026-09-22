@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Professor AI Workspace</title>
-  <link rel="stylesheet" href="/static/styles.css?v=20260817-async-jobs">
+  <link rel="stylesheet" href="/static/styles.css?v=20260921-progressive-jobs">
 </head>
 <body>
   <section id="login" class="auth-shell">
@@ -246,8 +246,17 @@
             <label>Course or programme
               <input id="teach-course" placeholder="e.g. MBA Finance">
             </label>
+            <label>Audience
+              <input id="teach-audience" placeholder="e.g. First-year MBA students">
+            </label>
             <label>Session duration
-              <div class="input-suffix"><input id="teach-duration" type="number" value="60"><span>minutes</span></div>
+              <div class="input-suffix"><input id="teach-duration" type="number" min="15" max="300" value="60"><span>minutes</span></div>
+            </label>
+            <label>Difficulty
+              <select id="teach-difficulty"><option value="introductory">Introductory</option><option value="intermediate" selected>Intermediate</option><option value="advanced">Advanced</option></select>
+            </label>
+            <label class="full-field">Additional requirements
+              <textarea id="teach-instructions" placeholder="Learning priorities, required examples, assessment style, exclusions, or institutional requirements"></textarea>
             </label>
             <label class="check full-field"><input id="teach-web" type="checkbox" checked><span><strong>Use current web research</strong><small>Include recent industry news and credible public sources.</small></span></label>
             <button class="primary-button submit-agent full-field">Generate teaching package <span>→</span></button>
@@ -259,6 +268,9 @@
             </label>
             <label class="full-field">Discipline
               <input id="discipline" placeholder="e.g. Management, Finance, Computer Science">
+            </label>
+            <label class="full-field">Additional requirements
+              <textarea id="research-instructions" placeholder="Population, geography, date range, methods, theories, exclusions, or required comparisons"></textarea>
             </label>
             <label class="check full-field"><input id="research-web" type="checkbox" checked><span><strong>Use current web research</strong><small>Supplement uploaded papers with recent credible sources.</small></span></label>
             <button class="primary-button submit-agent full-field">Generate research synthesis <span>→</span></button>
@@ -279,13 +291,13 @@
         </section>
 
         <section id="output" class="output-panel hidden">
-          <div class="output-heading"><div><span class="overline">AGENT OUTPUT</span><h3>Your material is ready</h3></div><div class="loader hidden" id="loader"></div></div>
+          <div class="output-heading"><div><span class="overline">AGENT OUTPUT</span><h3 id="output-title">Preparing your academic material</h3></div><div class="loader hidden" id="loader"></div></div>
           <div id="downloads" class="downloads"></div>
           <pre id="result"></pre>
         </section>
       </main>
     </div>
   </section>
-  <script src="/static/app.js?v=20260817-async-jobs"></script>
+  <script src="/static/app.js?v=20260921-progressive-jobs"></script>
 </body>
 </html>

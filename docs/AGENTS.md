@@ -29,8 +29,9 @@ Professor
 
 Endpoint: `POST /api/agents/teaching`
 
-The endpoint returns a `job_id` quickly. The UI polls `GET /api/jobs/{job_id}` until the job is
-`completed` or `failed`.
+The endpoint returns a `job_id` quickly. The UI polls `GET /api/jobs/{job_id}` without imposing a
+short browser-side timeout. Validated content becomes visible at `content_ready`; export creation
+continues until the job is `completed`, `artifact_failed`, or `failed`.
 
 Prompt: `TEACHING_SYSTEM` in `app/agents/prompts.py`
 
@@ -73,6 +74,11 @@ Generated artifacts:
 - paginated PDF teaching handbook with matching academic structure
 - presentation deck with lecture flow, activities, knowledge checks, and sources
 
+All visual exporters normalize MCQ option labels before numbering them, so an option is rendered
+once as `A. option text` even if a model response includes its own prefix. Mathematical notation is
+normalized to portable Unicode; PDF output embeds a Unicode font, and DOCX/PPTX math runs use a
+math-capable font so symbols such as `ŷ`, `Σ`, `μ`, `≈`, subscripts, and superscripts remain legible.
+
 Professor review should check factual accuracy, source suitability, workload, learning-level
 alignment, accessibility, and institutional assessment policy.
 
@@ -80,8 +86,9 @@ alignment, accessibility, and institutional assessment policy.
 
 Endpoint: `POST /api/agents/research`
 
-The endpoint returns a `job_id` quickly. The UI polls `GET /api/jobs/{job_id}` until the job is
-`completed` or `failed`.
+The endpoint returns a `job_id` quickly. The UI polls `GET /api/jobs/{job_id}` without imposing a
+short browser-side timeout. Validated content becomes visible at `content_ready`; export creation
+continues until the job is `completed`, `artifact_failed`, or `failed`.
 
 Prompt: `RESEARCH_SYSTEM` in `app/agents/prompts.py`
 
@@ -127,15 +134,17 @@ Both agents use:
 1. `AgentJob` for lifecycle tracking.
 2. Tenant-scoped retrieval from uploaded documents.
 3. `LLMService` for OpenAI or mock generation.
-4. `create_artifacts` for export.
-5. `StorageService` for local/S3 persistence.
-6. `AuditEvent` for success and failure traceability.
-7. FastAPI background tasks for the current in-app asynchronous execution model.
+4. A `content_ready` checkpoint that exposes validated JSON before export work completes.
+5. `create_artifacts` for export.
+6. `StorageService` for local/S3 persistence.
+7. `AuditEvent` for success and failure traceability.
+8. SQS-backed ECS workers in production, with FastAPI background tasks only for local development.
 
 ## Failure Behavior
 
 - Missing OpenAI key in OpenAI mode marks the queued job as `failed`.
 - Invalid model JSON marks the queued job as `failed`.
+- Export failures preserve validated content and mark the job as `artifact_failed`.
 - Upload extraction errors return a client error and do not create a ready document.
 - Artifact access from another tenant returns 404.
 

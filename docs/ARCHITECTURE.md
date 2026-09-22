@@ -32,6 +32,8 @@ Tenant-Scoped Application Services
 | --- | --- | --- |
 | Application entry point | `app/main.py` | Starts FastAPI, initializes schema, serves UI and health endpoint. |
 | API routes | `app/api/routes.py` | Authentication, upload, agent execution, jobs, and downloads. |
+| Queue publisher | `app/core/job_queue.py` | Publishes durable job identifiers to SQS in production. |
+| Worker | `app/worker.py` | Consumes SQS messages and completes idempotent agent jobs. |
 | Configuration | `app/core/config.py` | Environment-driven local and production settings. |
 | Database | `app/core/database.py` | SQLAlchemy engine, sessions, and schema initialization. |
 | Data models | `app/core/models.py` | Users, OTPs, sessions, documents, jobs, artifacts, and audit events. |
@@ -73,7 +75,8 @@ Supported source formats are PDF, DOCX, TXT, MD, and CSV.
 Faculty request
   -> create running agent_job and return job_id
   -> UI polls GET /api/jobs/{job_id}
-  -> in-process background task retrieves tenant-scoped source excerpts
+  -> web service publishes job_id to SQS
+  -> independent worker reloads the job and retrieves tenant-scoped source excerpts
   -> build controlled model payload
   -> call OpenAI or deterministic mock
   -> parse structured JSON
@@ -97,38 +100,32 @@ Uvicorn/FastAPI
   +-- Local Tesseract OCR for scanned PDFs
 ```
 
-## AWS Target Architecture
+## Current AWS Production Architecture
 
 ```text
-HTTPS / Application Load Balancer
-            |
-            v
-Elastic Beanstalk
-            |
-            v
-EC2 instances running FastAPI/Uvicorn
-   |             |                 |
-   v             v                 v
-RDS PostgreSQL   Private S3        OpenAI API / Textract
-metadata/audit   sources/artifacts model + web search / OCR
+professoraihub.com / CloudFront
+              |
+              v
+shared Application Load Balancer -- private application routing header
+              |
+              v
+isolated ECS web service -> SQS queue -> isolated ECS worker service
+       |                         |
+       +---- shared RDS instance, dedicated database/role
+       +---- private S3 prefixes, Secrets Manager/SSM, OpenAI/Textract
 ```
 
-Elastic Beanstalk manages application deployment and EC2 health. EC2 runs the application.
-RDS is the durable metadata/audit store. S3 is the durable file source of record.
+The four applications share only the load balancer, ECS capacity, and physical RDS instance.
+Professor AI retains separate services, target group, task roles, secrets, queue/DLQ, database,
+database role, and storage namespace. This reduces idle cost without coupling application data or
+release lifecycles. The legacy Elastic Beanstalk environment is paused during the rollback window.
 
 ## Scaling Boundary
 
-The current release uses FastAPI background tasks for asynchronous job execution. This removes the
-single long-running browser request from the user flow and is suitable for a small single-instance
-or low-concurrency Elastic Beanstalk deployment.
-
-Before autoscaling or enabling large research corpora, move job execution from in-process
-background tasks to a durable queue/worker design:
-
-- SQS job queue
-- background workers on ECS, EC2, or Elastic Beanstalk worker tier
-- idempotency keys and retry policies
-- vector retrieval using OpenAI vector stores, pgvector, or Qdrant
+The durable SQS/worker boundary is implemented. ECS can scale web and worker task counts
+independently as traffic grows, while queue depth provides back-pressure. Message redelivery is
+safe at the completed-job boundary and repeated failures go to a DLQ. The next scaling boundary is
+retrieval: large corpora should use OpenAI vector stores, pgvector, or Qdrant.
 
 Schema changes are managed through Alembic. Deployments run `alembic upgrade head` before starting
 the web process.

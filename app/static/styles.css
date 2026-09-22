@@ -170,6 +170,9 @@ input:focus, select:focus, textarea:focus { border-color: #7191e4; box-shadow: 0
 .output-panel { margin-top: 24px; padding: 28px; border: 1px solid var(--line); border-radius: 16px; background: white; box-shadow: var(--shadow); }
 .output-heading { display: flex; justify-content: space-between; align-items: center; }.output-heading h3 { margin: 6px 0 15px; color: var(--navy); }
 .downloads { display: flex; flex-wrap: wrap; gap: 8px; }.download { padding: 8px 12px; border-radius: 8px; color: #274fbc; background: var(--blue-soft); font-size: 11px; font-weight: 700; text-decoration: none; }
+.export-progress,.export-error { display: inline-flex; padding: 8px 12px; border-radius: 8px; font-size: 11px; font-weight: 700; }
+.export-progress { color: #274fbc; background: var(--blue-soft); }
+.export-error { color: #9f2d2d; background: #fff0f0; }
 .output-panel pre { max-height: 520px; overflow: auto; margin: 18px 0 0; padding: 20px; border-radius: 11px; color: #dfe9f7; background: #112139; white-space: pre-wrap; font: 11px/1.6 ui-monospace, monospace; }
 .loader { width: 25px; height: 25px; border: 3px solid #d9e2ee; border-top-color: var(--blue); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }

@@ -62,7 +62,7 @@ Stores actor, tenant, event type, entity, status, request ID, IP address, detail
 - `agent.research.failed`
 
 Queued events are emitted when the HTTP request creates a job. Completion and failure events are
-emitted by the asynchronous background task.
+emitted by the asynchronous worker, or by the local background backend during development.
 
 ## Useful PostgreSQL Queries
 

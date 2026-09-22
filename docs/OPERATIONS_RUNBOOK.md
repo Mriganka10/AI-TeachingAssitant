@@ -2,7 +2,8 @@
 
 ## Daily Checks
 
-- Elastic Beanstalk environment health is green.
+- ECS web and worker services have the expected running task count and no deployment failures.
+- SQS oldest-message age, visible messages, and DLQ depth are within expected limits.
 - `/health` returns HTTP 200.
 - OTP delivery succeeds.
 - OpenAI requests do not show elevated 401, 429, or 5xx errors.
@@ -21,13 +22,12 @@ python -m ruff check .
 curl http://127.0.0.1:8000/health
 ```
 
-Elastic Beanstalk:
+AWS production:
 
 ```bash
-eb status
-eb health
-eb events
-eb logs
+aws ecs describe-services --cluster <cluster> --services <web-service> <worker-service>
+aws sqs get-queue-attributes --queue-url <queue-url> --attribute-names All
+aws logs tail <log-group> --since 30m
 ```
 
 ## Troubleshooting
@@ -43,6 +43,13 @@ app.main:app
 ### Startup rejects `SECRET_KEY`
 
 Production refuses the development default. Generate and configure a long random value.
+
+### New-user registration returns HTTP 503
+
+Check the web logs for `AccessDeniedException` on `ses:GetEmailIdentity` or
+`ses:CreateEmailIdentity`. The ECS task role—not only the execution role—must allow both actions
+plus SES send actions. A missing permission can make migrated verified users appear unverified;
+once restored, the next status check reconciles the database row from SES.
 
 ### Agent job fails
 
@@ -62,14 +69,14 @@ check CloudFront/Nginx logs for timeouts or cached frontend assets, then verify 
 
 Inspect:
 
-- whether the EB instance is CPU/memory constrained
+- whether the ECS worker task is CPU/memory constrained
 - OpenAI latency or rate limits
 - OCR/document extraction duration for large uploads
 - job row `started_at` age
-- application container logs
+- worker container logs and SQS/DLQ metrics
 
-The current implementation uses in-process FastAPI background tasks. A container restart can
-interrupt running work; high-concurrency production should use SQS and worker instances.
+Production uses SQS and a separate worker. A failed task leaves the message for retry; inspect the
+DLQ and job error before replaying. Local `background` mode remains intentionally non-durable.
 
 ### Artifact cannot be downloaded
 
@@ -77,7 +84,7 @@ Check:
 
 - artifact belongs to signed-in tenant
 - S3 URI is correct
-- EB EC2 role has `GetObject`
+- ECS task role has `GetObject`
 - object exists
 - KMS decrypt permission exists
 
@@ -98,7 +105,7 @@ configuration: local Tesseract for development or Amazon Textract for AWS produc
 For OpenAI, SMTP, database, or application secrets:
 
 1. create replacement secret
-2. update EB environment or secret manager
+2. update Secrets Manager/SSM and the ECS task definition
 3. restart/redeploy if needed
 4. verify functionality
 5. revoke old credential

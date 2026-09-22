@@ -27,6 +27,7 @@ from app.core.auth import CurrentUser, auth_service, current_user
 from app.core.config import settings
 from app.core.database import SessionLocal, get_db
 from app.core.documents import extract_text
+from app.core.job_queue import enqueue_agent_job
 from app.core.models import AgentJob, Artifact, SourceDocument
 from app.core.storage import checksum, storage
 from app.schemas import OTPRequest, OTPVerify, ResearchRequest, TeachingRequest
@@ -195,7 +196,7 @@ def teaching_agent(
     user: CurrentUser = Depends(current_user),
     db: Session = Depends(get_db),
 ):
-    return _enqueue_agent("teaching", payload.model_dump(), TEACHING_SYSTEM, background_tasks, request, user, db)
+    return _enqueue_agent("teaching", payload.model_dump(), background_tasks, request, user, db)
 
 
 @router.post("/agents/research")
@@ -206,13 +207,12 @@ def research_agent(
     user: CurrentUser = Depends(current_user),
     db: Session = Depends(get_db),
 ):
-    return _enqueue_agent("research", payload.model_dump(), RESEARCH_SYSTEM, background_tasks, request, user, db)
+    return _enqueue_agent("research", payload.model_dump(), background_tasks, request, user, db)
 
 
 def _enqueue_agent(
     agent_type: str,
     payload: dict,
-    system_prompt: str,
     background_tasks: BackgroundTasks,
     request: Request,
     user: CurrentUser,
@@ -237,44 +237,71 @@ def _enqueue_agent(
         entity_id=job.id,
         details={"async": True},
     )
-    background_tasks.add_task(
-        _run_agent_job,
-        job.id,
-        agent_type,
-        payload,
-        system_prompt,
-        user.tenant_id,
-        user.email,
-    )
+    if settings.uses_sqs_agent_queue:
+        try:
+            enqueue_agent_job(job.id)
+        except Exception as exc:
+            job.status = "failed"
+            job.error_message = "The agent queue is temporarily unavailable."
+            job.completed_at = datetime.now(UTC)
+            db.commit()
+            raise HTTPException(status_code=503, detail=job.error_message) from exc
+    else:
+        background_tasks.add_task(run_agent_job, job.id)
     return _serialize_job(db, job, include_result=False)
 
 
-def _run_agent_job(
-    job_id: str,
-    agent_type: str,
-    payload: dict,
-    system_prompt: str,
-    tenant_id: str,
-    actor_email: str,
-) -> None:
+def run_agent_job(job_id: str) -> None:
     db = SessionLocal()
+    job = None
     try:
         job = db.get(AgentJob, job_id)
         if not job:
             return
-        query = payload.get("topic") or payload.get("research_topic", "")
-        contexts = retrieve_context(
-            db,
-            tenant_id=tenant_id,
-            query=query,
-            collections=payload.get("collections", []),
-        )
-        model_payload = {**payload, "uploaded_context": contexts}
-        result, model = llm.generate(
-            system=system_prompt,
-            payload=model_payload,
-            use_web_search=payload.get("use_web_search", False),
-        )
+        if job.status == "completed":
+            return
+        agent_type = job.agent_type
+        payload = job.request_payload
+        tenant_id = job.tenant_id
+        actor_email = job.created_by
+
+        # A worker may be restarted after the validated content was committed but before all
+        # exports were written. Reuse that content instead of paying for and waiting on a second
+        # model request.
+        if job.result_payload:
+            result = job.result_payload
+            model = job.model or settings.openai_model
+        else:
+            system_prompt = TEACHING_SYSTEM if agent_type == "teaching" else RESEARCH_SYSTEM
+            query = " ".join(
+                str(value)
+                for value in (
+                    payload.get("topic") or payload.get("research_topic", ""),
+                    payload.get("course") or payload.get("discipline", ""),
+                    payload.get("instructions", ""),
+                )
+                if value
+            )
+            contexts = retrieve_context(
+                db,
+                tenant_id=tenant_id,
+                query=query,
+                collections=payload.get("collections", []),
+            )
+            model_payload = {**payload, "uploaded_context": contexts}
+            result, model = llm.generate(
+                agent_type=agent_type,
+                system=system_prompt,
+                payload=model_payload,
+                use_web_search=payload.get("use_web_search", False),
+            )
+            # Make validated content available to the browser before DOCX, PDF, and PPTX export.
+            job.result_payload = result
+            job.model = model
+            job.status = "content_ready"
+            job.error_message = None
+            db.commit()
+
         paths = create_artifacts(
             result,
             agent_type=agent_type,
@@ -299,8 +326,6 @@ def _run_agent_job(
             )
             artifacts.append(artifact)
         job.status = "completed"
-        job.result_payload = result
-        job.model = model
         job.completed_at = datetime.now(UTC)
         db.commit()
         audit(
@@ -314,18 +339,25 @@ def _run_agent_job(
             details={"model": model, "artifact_count": len(artifacts)},
         )
     except Exception as exc:
+        db.rollback()
         job = db.get(AgentJob, job_id)
         if not job:
             return
-        job.status = "failed"
-        job.error_message = str(exc)[:2000]
+        content_was_generated = bool(job.result_payload)
+        job.status = "artifact_failed" if content_was_generated else "failed"
+        prefix = "Content was generated, but document export failed: " if content_was_generated else ""
+        job.error_message = (prefix + str(exc))[:2000]
         job.completed_at = datetime.now(UTC)
         db.commit()
         audit(
             db,
             tenant_id=tenant_id,
-            actor_email=actor_email,
-            event_type=f"agent.{agent_type}.failed",
+            actor_email=job.created_by,
+            event_type=(
+                f"agent.{job.agent_type}.artifact_failed"
+                if content_was_generated
+                else f"agent.{job.agent_type}.failed"
+            ),
             status="failed",
             entity_type="job",
             entity_id=job.id,
@@ -336,18 +368,16 @@ def _run_agent_job(
 
 
 def _serialize_job(db: Session, job: AgentJob, *, include_result: bool = True) -> dict:
-    artifacts = []
-    if job.status == "completed":
-        artifacts = db.scalars(
-            select(Artifact)
-            .where(Artifact.job_id == job.id, Artifact.tenant_id == job.tenant_id)
-            .order_by(Artifact.created_at.asc())
-        ).all()
+    artifacts = db.scalars(
+        select(Artifact)
+        .where(Artifact.job_id == job.id, Artifact.tenant_id == job.tenant_id)
+        .order_by(Artifact.created_at.asc())
+    ).all()
     response = {
         "job_id": job.id,
         "status": job.status,
-        "result": job.result_payload if include_result and job.status == "completed" else None,
-        "error": job.error_message if job.status == "failed" else None,
+        "result": job.result_payload if include_result else None,
+        "error": job.error_message if job.status in {"failed", "artifact_failed"} else None,
         "artifacts": [
             {"id": item.id, "filename": item.filename, "type": item.artifact_type}
             for item in artifacts
