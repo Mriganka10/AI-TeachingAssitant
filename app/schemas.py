@@ -19,6 +19,7 @@ class TeachingRequest(BaseModel):
     duration_minutes: int = Field(default=60, ge=15, le=300)
     difficulty: Literal["introductory", "intermediate", "advanced"] = "intermediate"
     use_web_search: bool = True
+    generate_video: bool = False
     collections: list[str] = Field(default_factory=list)
     instructions: str = ""
 

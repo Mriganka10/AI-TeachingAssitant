@@ -1,12 +1,13 @@
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from app.api import routes
 from app.core.auth import auth_service
 from app.core.config import settings
 from app.core.database import SessionLocal
-from app.core.models import AgentJob
+from app.core.models import AgentJob, Artifact
 from app.main import app
 
 
@@ -216,6 +217,79 @@ def test_artifact_failure_preserves_generated_content(monkeypatch) -> None:
     assert "Content was generated, but document export failed" in job["error"]
 
 
+def test_optional_teaching_video_is_downloadable(monkeypatch) -> None:
+    observed = {}
+
+    def create_fake_video(result, path):
+        with SessionLocal() as db:
+            job = db.get(AgentJob, path.parent.name)
+            observed["status"] = job.status
+            observed["artifact_types"] = {
+                artifact.artifact_type
+                for artifact in db.scalars(
+                    select(Artifact).where(Artifact.job_id == job.id)
+                ).all()
+            }
+        path.write_bytes(b"mock-mp4")
+        return path
+
+    monkeypatch.setattr(routes, "create_teaching_video", create_fake_video)
+
+    with TestClient(app) as client:
+        login(client)
+        response = client.post(
+            "/api/agents/teaching",
+            json={
+                "topic": "Video-supported learning",
+                "use_web_search": False,
+                "generate_video": True,
+            },
+        )
+        job = client.get(f"/api/jobs/{response.json()['job_id']}").json()
+
+    assert job["status"] == "completed"
+    assert job["warning"] is None
+    assert observed == {
+        "status": "documents_ready",
+        "artifact_types": {"json", "docx", "pdf", "pptx"},
+    }
+    assert {artifact["type"] for artifact in job["artifacts"]} == {
+        "json",
+        "docx",
+        "pdf",
+        "pptx",
+        "mp4",
+    }
+
+
+def test_video_failure_does_not_remove_existing_document_formats(monkeypatch) -> None:
+    def fail_video(result, path):
+        raise RuntimeError("simulated narration failure")
+
+    monkeypatch.setattr(routes, "create_teaching_video", fail_video)
+
+    with TestClient(app) as client:
+        login(client)
+        response = client.post(
+            "/api/agents/teaching",
+            json={
+                "topic": "Resilient video export",
+                "use_web_search": False,
+                "generate_video": True,
+            },
+        )
+        job = client.get(f"/api/jobs/{response.json()['job_id']}").json()
+
+    assert job["status"] == "completed"
+    assert {artifact["type"] for artifact in job["artifacts"]} == {
+        "json",
+        "docx",
+        "pdf",
+        "pptx",
+    }
+    assert "optional video could not be generated" in job["warning"]
+
+
 def test_frontend_handles_non_json_api_responses() -> None:
     script = Path("app/static/app.js").read_text()
 
@@ -225,6 +299,8 @@ def test_frontend_handles_non_json_api_responses() -> None:
     assert "waitForJob" in script
     assert "/api/jobs/" in script
     assert 'job.status === "content_ready"' in script
+    assert 'job.status === "documents_ready"' in script
+    assert "generate_video" in script
     assert "maxAttempts" not in script
 
 

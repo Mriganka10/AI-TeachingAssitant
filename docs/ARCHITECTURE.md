@@ -22,6 +22,7 @@ Tenant-Scoped Application Services
        +-- Bounded multi-collection retrieval
        +-- OpenAI Responses API + optional web search
        +-- Structured PPTX / DOCX / PDF / JSON generation
+       +-- Optional multimedia teaching-video generation (MP4, 4–15 minutes)
        +-- Local disk or encrypted S3 storage
        +-- Audit-event recording
 ```
@@ -42,6 +43,7 @@ Tenant-Scoped Application Services
 | LLM service | `app/agents/llm.py` | OpenAI Responses API, optional web search, mock mode, JSON parsing. |
 | Agent prompts | `app/agents/prompts.py` | Teaching and research output contracts. |
 | Artifact generator | `app/artifacts/generator.py` | Professor-ready JSON, DOCX, PDF, and PPTX creation with headings, tables, assessment sections, evidence callouts, and references. |
+| Video generator | `app/artifacts/video.py` | Optional content-grounded storyboard, multiple visual scene types, provider-selectable AI narration, animated transitions, and bounded MP4 rendering. |
 | Storage | `app/core/storage.py` | Local persistence or encrypted S3 upload/download. |
 | Faculty UI | `app/static/` | Login, dashboard, agent workbenches, library, and output viewer. |
 

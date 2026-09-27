@@ -111,6 +111,7 @@ Content-Type: application/json
   "duration_minutes": 60,
   "difficulty": "intermediate",
   "use_web_search": true,
+  "generate_video": true,
   "collections": ["previous_notes", "books", "case_studies"],
   "instructions": "Include one Indian business example"
 }
@@ -129,6 +130,10 @@ The response queues the job and returns immediately:
 ```
 
 Use `GET /api/jobs/{job_id}` to poll until the job reaches `completed` or `failed`.
+When `generate_video` is true, a successful teaching job includes an `mp4` artifact containing a
+content-grounded multimedia overview with several explanatory visual compositions and
+provider-selectable AI narration. The default duration range is 4–15 minutes. If it fails, the job
+remains completed with its JSON, DOCX, PDF, and PPTX artifacts and returns a non-fatal `warning`.
 
 ## Research Paper Assistant
 

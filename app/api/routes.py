@@ -22,6 +22,7 @@ from app.agents.llm import llm
 from app.agents.prompts import RESEARCH_SYSTEM, TEACHING_SYSTEM
 from app.agents.retrieval import retrieve_context
 from app.artifacts.generator import create_artifacts
+from app.artifacts.video import create_teaching_video
 from app.core.audit import audit
 from app.core.auth import CurrentUser, auth_service, current_user
 from app.core.config import settings
@@ -302,32 +303,44 @@ def run_agent_job(job_id: str) -> None:
             job.error_message = None
             db.commit()
 
+        output_dir = settings.data_dir / "generated" / job.id
         paths = create_artifacts(
             result,
             agent_type=agent_type,
-            output_dir=settings.data_dir / "generated" / job.id,
+            output_dir=output_dir,
         )
-        artifacts = []
         for path in paths:
-            artifact = Artifact(
-                tenant_id=tenant_id,
-                job_id=job.id,
-                artifact_type=path.suffix.lstrip("."),
-                filename=path.name,
-                content_type=mimetypes.guess_type(path.name)[0] or "application/octet-stream",
-                storage_uri="pending",
-                size_bytes=path.stat().st_size,
-                checksum_sha256=checksum(path),
-            )
-            db.add(artifact)
-            db.flush()
-            artifact.storage_uri = storage.save(
-                path, tenant_id=tenant_id, category="artifacts", object_id=artifact.id
-            )
-            artifacts.append(artifact)
+            _persist_artifact(db, path, tenant_id=tenant_id, job_id=job.id)
+        video_requested = agent_type == "teaching" and bool(payload.get("generate_video"))
+        if video_requested:
+            # Make the four established formats downloadable while the slower narration and video
+            # encoder continue in the worker.
+            job.status = "documents_ready"
+        db.commit()
+
+        video_warning = None
+        if video_requested:
+            try:
+                base = next(path.stem for path in paths if path.suffix == ".json")
+                video_path = create_teaching_video(result, output_dir / f"{base}-explainer.mp4")
+                _persist_artifact(db, video_path, tenant_id=tenant_id, job_id=job.id)
+                db.commit()
+            except Exception as exc:  # noqa: BLE001 - optional video must not fail core artifacts
+                db.rollback()
+                job = db.get(AgentJob, job.id)
+                # Video is optional. Preserve all established document formats if narration or
+                # encoding is temporarily unavailable.
+                video_warning = (
+                    "JSON, DOCX, PDF, and PPTX are ready, but the optional video could not be "
+                    f"generated: {exc}"
+                )[:2000]
         job.status = "completed"
+        job.error_message = video_warning
         job.completed_at = datetime.now(UTC)
         db.commit()
+        persisted_artifacts = db.scalars(
+            select(Artifact).where(Artifact.job_id == job.id, Artifact.tenant_id == tenant_id)
+        ).all()
         audit(
             db,
             tenant_id=tenant_id,
@@ -336,7 +349,15 @@ def run_agent_job(job_id: str) -> None:
             status="success",
             entity_type="job",
             entity_id=job.id,
-            details={"model": model, "artifact_count": len(artifacts)},
+            details={
+                "model": model,
+                "artifact_count": len(persisted_artifacts),
+                "video_requested": bool(payload.get("generate_video")),
+                "video_generated": any(
+                    item.artifact_type == "mp4" for item in persisted_artifacts
+                ),
+                "video_warning": video_warning,
+            },
         )
     except Exception as exc:
         db.rollback()
@@ -367,6 +388,25 @@ def run_agent_job(job_id: str) -> None:
         db.close()
 
 
+def _persist_artifact(db: Session, path: Path, *, tenant_id: str, job_id: str) -> Artifact:
+    artifact = Artifact(
+        tenant_id=tenant_id,
+        job_id=job_id,
+        artifact_type=path.suffix.lstrip("."),
+        filename=path.name,
+        content_type=mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+        storage_uri="pending",
+        size_bytes=path.stat().st_size,
+        checksum_sha256=checksum(path),
+    )
+    db.add(artifact)
+    db.flush()
+    artifact.storage_uri = storage.save(
+        path, tenant_id=tenant_id, category="artifacts", object_id=artifact.id
+    )
+    return artifact
+
+
 def _serialize_job(db: Session, job: AgentJob, *, include_result: bool = True) -> dict:
     artifacts = db.scalars(
         select(Artifact)
@@ -378,6 +418,7 @@ def _serialize_job(db: Session, job: AgentJob, *, include_result: bool = True) -
         "status": job.status,
         "result": job.result_payload if include_result else None,
         "error": job.error_message if job.status in {"failed", "artifact_failed"} else None,
+        "warning": job.error_message if job.status == "completed" else None,
         "artifacts": [
             {"id": item.id, "filename": item.filename, "type": item.artifact_type}
             for item in artifacts

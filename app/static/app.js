@@ -337,8 +337,11 @@ async function run(url, payload) {
   $("#output").scrollIntoView({ behavior: "smooth", block: "start" });
   try {
     const queued = await api(url, { method: "POST", body: JSON.stringify(payload) });
-    $("#result").textContent = "Your request is queued. Preparing professor-ready documents...";
-    const data = await waitForJob(queued.job_id);
+    const videoRequested = Boolean(payload.generate_video);
+    $("#result").textContent = videoRequested
+      ? "Your request is queued. Preparing professor-ready documents and the explainer video..."
+      : "Your request is queued. Preparing professor-ready documents...";
+    const data = await waitForJob(queued.job_id, videoRequested);
     if (data.status === "failed") {
       throw new Error(data.error || "Agent generation failed. Please retry.");
     }
@@ -351,7 +354,10 @@ async function run(url, payload) {
     }
     $("#output-title").textContent = "Your material and downloads are ready";
     $("#result").textContent = JSON.stringify(data.result, null, 2);
-    $("#downloads").innerHTML = renderDownloads(data.artifacts || []);
+    const warning = data.warning
+      ? `<span class="export-warning">${escapeHtml(data.warning)}</span>`
+      : "";
+    $("#downloads").innerHTML = renderDownloads(data.artifacts || []) + warning;
     await loadDashboard();
   } catch (error) {
     $("#output-title").textContent = "The agent could not complete this request";
@@ -367,7 +373,7 @@ function renderDownloads(artifacts) {
     .join("");
 }
 
-async function waitForJob(jobId) {
+async function waitForJob(jobId, videoRequested = false) {
   if (!jobId) {
     throw new Error("The server did not return a job id. Please retry.");
   }
@@ -379,10 +385,18 @@ async function waitForJob(jobId) {
       return job;
     }
 
-    if (job.result && job.status === "content_ready") {
+    if (job.result && job.status === "documents_ready") {
+      $("#output-title").textContent = "Your documents are ready - preparing video";
+      $("#result").textContent = JSON.stringify(job.result, null, 2);
+      $("#downloads").innerHTML = renderDownloads(job.artifacts || [])
+        + '<span class="export-progress">Generating the narrated MP4 video...</span>';
+      contentDisplayed = true;
+    } else if (job.result && job.status === "content_ready") {
       $("#output-title").textContent = "Your content is ready - preparing downloads";
       $("#result").textContent = JSON.stringify(job.result, null, 2);
-      $("#downloads").innerHTML = '<span class="export-progress">Generating DOCX, PDF, and PPTX files...</span>';
+      $("#downloads").innerHTML = videoRequested
+        ? '<span class="export-progress">Generating DOCX, PDF, PPTX, and narrated MP4 files...</span>'
+        : '<span class="export-progress">Generating DOCX, PDF, and PPTX files...</span>';
       contentDisplayed = true;
     } else if (!contentDisplayed) {
       const elapsed = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
@@ -406,6 +420,7 @@ $("#teaching-form").onsubmit = (event) => {
     difficulty: $("#teach-difficulty").value,
     instructions: $("#teach-instructions").value.trim(),
     use_web_search: $("#teach-web").checked,
+    generate_video: $("#teach-video").checked,
     collections: ["previous_notes", "books", "case_studies"],
   });
 };

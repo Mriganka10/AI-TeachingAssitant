@@ -15,7 +15,7 @@ Professor
    |      -> retrieve notes/books/cases
    |      -> optional web search
    |      -> structured teaching package
-   |      -> PPTX, DOCX, PDF, JSON
+   |      -> PPTX, DOCX, PDF, JSON, optional multimedia MP4
    |
    +-- Research Paper Assistant
           -> queue agent job
@@ -31,7 +31,8 @@ Endpoint: `POST /api/agents/teaching`
 
 The endpoint returns a `job_id` quickly. The UI polls `GET /api/jobs/{job_id}` without imposing a
 short browser-side timeout. Validated content becomes visible at `content_ready`; export creation
-continues until the job is `completed`, `artifact_failed`, or `failed`.
+continues until the job is `completed`, `artifact_failed`, or `failed`. When video is selected,
+`documents_ready` exposes JSON, DOCX, PDF, and PPTX downloads while MP4 rendering continues.
 
 Prompt: `TEACHING_SYSTEM` in `app/agents/prompts.py`
 
@@ -50,6 +51,7 @@ Inputs:
 - difficulty
 - optional additional instructions
 - whether to use current web research
+- whether to generate a multimedia explainer video
 - source collections
 
 Required structured output:
@@ -73,6 +75,10 @@ Generated artifacts:
 - styled Word teaching handbook with session plan, notes, assessment toolkit, and references
 - paginated PDF teaching handbook with matching academic structure
 - presentation deck with lecture flow, activities, knowledge checks, and sources
+- optional 16:9 multimedia MP4 derived from the validated teaching package. A second structured
+  storyboard pass turns the package into a coherent mini-lecture with concept maps, comparisons,
+  processes, worked examples, formulas, applications, misconceptions, and a recap. Duration is
+  normally 4–15 minutes, with a hard 15-minute limit and an on-screen AI-voice disclosure.
 
 All visual exporters normalize MCQ option labels before numbering them, so an option is rendered
 once as `A. option text` even if a model response includes its own prefix. Mathematical notation is
@@ -135,7 +141,7 @@ Both agents use:
 2. Tenant-scoped retrieval from uploaded documents.
 3. `LLMService` for OpenAI or mock generation.
 4. A `content_ready` checkpoint that exposes validated JSON before export work completes.
-5. `create_artifacts` for export.
+5. `create_artifacts` for established document export, plus optional teaching-video rendering.
 6. `StorageService` for local/S3 persistence.
 7. `AuditEvent` for success and failure traceability.
 8. SQS-backed ECS workers in production, with FastAPI background tasks only for local development.
@@ -145,6 +151,9 @@ Both agents use:
 - Missing OpenAI key in OpenAI mode marks the queued job as `failed`.
 - Invalid model JSON marks the queued job as `failed`.
 - Export failures preserve validated content and mark the job as `artifact_failed`.
+- Optional video failures preserve JSON, DOCX, PDF, and PPTX, complete the job, and return a warning.
+- Mock mode never creates a misleading silent placeholder video; narrated video requires
+  `LLM_SERVICE_MODE=openai` and `OPENAI_API_KEY`.
 - Upload extraction errors return a client error and do not create a ready document.
 - Artifact access from another tenant returns 404.
 

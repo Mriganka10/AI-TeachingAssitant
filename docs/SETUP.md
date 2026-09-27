@@ -39,7 +39,32 @@ Set at minimum:
 SECRET_KEY=<long-random-application-secret>
 OPENAI_API_KEY=<valid-openai-api-key>
 LLM_SERVICE_MODE=openai
+VIDEO_GENERATION_ENABLED=true
+VIDEO_MIN_MINUTES=4
+VIDEO_MAX_MINUTES=15
+VIDEO_SCRIPT_MODEL=
+VIDEO_SCRIPT_MAX_OUTPUT_TOKENS=14000
+VIDEO_TTS_PROVIDER=openai
+VIDEO_TTS_MODEL=gpt-4o-mini-tts
+VIDEO_TTS_VOICE=marin
+VIDEO_TTS_SPEED=0.95
+ELEVENLABS_API_KEY=
+ELEVENLABS_MODEL_ID=eleven_multilingual_v2
+ELEVENLABS_VOICE_ID=JBFqnCBsd6RMkjVDRZzb
+ELEVENLABS_OUTPUT_FORMAT=mp3_44100_128
+ELEVENLABS_STABILITY=0.55
+ELEVENLABS_SIMILARITY_BOOST=0.78
 ```
+
+`imageio-ffmpeg` installs the video encoder with the Python dependencies. Multimedia video is
+opt-in in the Teaching Assistant form and is not created for document-only requests. OpenAI builds
+the grounded storyboard. Set `VIDEO_TTS_PROVIDER=elevenlabs` and provide `ELEVENLABS_API_KEY` plus
+a voice ID for ElevenLabs long-form narration; otherwise OpenAI TTS is used. Mock mode does not
+create a silent placeholder because that could be mistaken for a finished explanatory video. Leave
+`VIDEO_SCRIPT_MODEL` blank to use `OPENAI_MODEL` for the structured storyboard.
+
+The default ElevenLabs format is `mp3_44100_128`, which the application converts to WAV locally
+before video assembly. Do not set `pcm_44100` unless the ElevenLabs account is on Pro or above.
 
 Generate an application secret:
 

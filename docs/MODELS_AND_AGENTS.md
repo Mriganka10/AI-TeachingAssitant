@@ -25,6 +25,7 @@ system prompts, input schemas, selected source collections, and output requireme
 | PDF extraction | `pypdf` + optional OCR | Extract text PDFs and scanned PDFs when OCR is configured. |
 | DOCX extraction | `python-docx` | Extract document paragraphs. |
 | PPTX generation | `python-pptx` | Build teaching and research presentation decks. |
+| Teaching video | Pillow + FFmpeg + OpenAI or ElevenLabs TTS | Build an optional multimedia MP4 from validated teaching content. |
 | PDF generation | ReportLab | Build downloadable reports. |
 | Mock testing | Deterministic Python templates | Test without API cost or network dependency. |
 
@@ -64,8 +65,20 @@ production. The local profile can execute them as FastAPI background tasks. The 
 returns a `job_id` immediately; the UI polls `GET /api/jobs/{job_id}` until structured output and
 downloadable artifacts are ready. This keeps long OpenAI and document-generation work away from
 the original browser request. After validated JSON is committed, DOCX, PDF, and PPTX exporters run
-in parallel because they write independent files. The browser can display content while those
-downloads finish.
+in parallel because they write independent files. When selected for a teaching job, video
+generation follows those established exports so narration or encoding failure cannot remove the
+existing formats. The browser can display content while those downloads finish.
+
+The video planner makes a separate schema-constrained Responses API call after teaching content is
+validated. It turns the title, objectives, lecture sections, examples, activities, case study, and
+review questions into a coherent 16:9 mini-lecture rather than reading document bullets. The script
+must explain definitions, mechanisms, distinctions, examples, misconceptions, and takeaways and
+must satisfy a narration word-range check. Narration then uses the configured OpenAI Speech model
+and voice. The default duration range is 4–15 minutes; a final encoder limit guarantees that no
+video exceeds 15 minutes. The storyboard must use at least three visual compositions, including
+concept maps, comparisons, processes, worked examples, formulas, case studies, or recaps. The UI
+and video both disclose that the narration is AI-generated. Narration can use OpenAI TTS or the
+optional ElevenLabs long-form provider without changing document generation.
 
 The presentation is intentionally a concise teaching or research deck. Full prose remains in the
 DOCX, PDF, and JSON outputs. Slide layouts summarize long explanations, preserve assessments and
@@ -73,7 +86,9 @@ source lists, clean Markdown links, and paginate only when content cannot fit at
 PPTX callouts use consistent visual grouping, MCQ labels are normalized across every exporter, and
 mathematical notation is rendered with Unicode-capable fonts in PDF, DOCX, and PPTX outputs.
 Callout heights, answer areas, and numerical-problem regions are calculated from their content;
-PowerPoint text fitting remains enabled as a final safeguard against clipping and overlap.
+PowerPoint callouts calculate their natural height, select a readable fitting font, and allocate
+separate vertical regions. Dense professor guidance moves to a continuation slide rather than
+overlapping another box. PowerPoint text fitting remains enabled as a final safeguard.
 
 ## Mode Selection
 

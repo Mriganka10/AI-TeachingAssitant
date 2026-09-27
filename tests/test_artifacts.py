@@ -48,8 +48,7 @@ def test_teaching_deck_is_compact_and_cleans_model_markdown(tmp_path: Path) -> N
             "core_formulas": [long_text] * 5,
         },
         "learning_objectives": [
-            {"id": f"LO{i}", "objective": long_text, "bloom_level": "Apply"}
-            for i in range(1, 6)
+            {"id": f"LO{i}", "objective": long_text, "bloom_level": "Apply"} for i in range(1, 6)
         ],
         "lecture_sections": [
             {
@@ -75,14 +74,22 @@ def test_teaching_deck_is_compact_and_cleans_model_markdown(tmp_path: Path) -> N
             for _ in range(5)
         ],
         "discussion_questions": [long_text] * 5,
-        "sources": [{"title": "User Guide", "year": "2026", "url":
-                     "https://scikit-learn.org/stable/user_guide?utm_source=openai"}],
+        "sources": [
+            {
+                "title": "User Guide",
+                "year": "2026",
+                "url": "https://scikit-learn.org/stable/user_guide?utm_source=openai",
+            }
+        ],
     }
 
     paths = create_artifacts(result, agent_type="teaching", output_dir=tmp_path)
     presentation = Presentation(next(path for path in paths if path.suffix == ".pptx"))
     slide_text = "\n".join(
-        shape.text for slide in presentation.slides for shape in slide.shapes if hasattr(shape, "text")
+        shape.text
+        for slide in presentation.slides
+        for shape in slide.shapes
+        if hasattr(shape, "text")
     )
 
     assert len(presentation.slides) <= 24
@@ -142,21 +149,25 @@ def test_exporters_preserve_math_and_normalize_mcq_labels(tmp_path: Path) -> Non
                 "Centroid μ_k ≈ 3.2",
             ],
         },
-        "mcqs": [{
-            "question": "Which statement is correct?",
-            "options": ["A. First", "B) Second", "Option C: Third", "D - Fourth"],
-            "answer": "A",
-            "explanation": "The first option is correct.",
-        }],
-        "numerical_problems": [{
-            "problem": "Compute the mean squared error.",
-            "given": ["Predictions ŷ = [2, 4]", "True values y = [1, 5]"],
-            "solution_steps": [
-                "Errors y - ŷ = [-1, 1].",
-                "MSE = (1/2) Σ_i (y_i - ŷ_i)^2 = 1.",
-            ],
-            "final_answer": "MSE = 1.",
-        }],
+        "mcqs": [
+            {
+                "question": "Which statement is correct?",
+                "options": ["A. First", "B) Second", "Option C: Third", "D - Fourth"],
+                "answer": "A",
+                "explanation": "The first option is correct.",
+            }
+        ],
+        "numerical_problems": [
+            {
+                "problem": "Compute the mean squared error.",
+                "given": ["Predictions ŷ = [2, 4]", "True values y = [1, 5]"],
+                "solution_steps": [
+                    "Errors y - ŷ = [-1, 1].",
+                    "MSE = (1/2) Σ_i (y_i - ŷ_i)^2 = 1.",
+                ],
+                "final_answer": "MSE = 1.",
+            }
+        ],
     }
 
     paths = create_artifacts(result, agent_type="teaching", output_dir=tmp_path)
@@ -166,7 +177,10 @@ def test_exporters_preserve_math_and_normalize_mcq_labels(tmp_path: Path) -> Non
     docx_text = "\n".join(paragraph.text for paragraph in Document(by_suffix[".docx"]).paragraphs)
     presentation = Presentation(by_suffix[".pptx"])
     pptx_text = "\n".join(
-        shape.text for slide in presentation.slides for shape in slide.shapes if hasattr(shape, "text")
+        shape.text
+        for slide in presentation.slides
+        for shape in slide.shapes
+        if hasattr(shape, "text")
     )
 
     for exported_text in (pdf_text, docx_text, pptx_text):
@@ -192,77 +206,103 @@ def test_pptx_callouts_fit_content_without_overlapping_sections(tmp_path: Path) 
             "difficulty": "intermediate",
             "lesson_purpose": "Distinguish learning paradigms and evaluate predictions.",
         },
-        "lecture_sections": [{
-            "title": "Supervised and Unsupervised Learning",
-            "minutes": 15,
-            "content": {
-                "explanation": "Labels determine whether a model learns a prediction target.",
-                "key_points": [
-                    "Supervised learning uses labelled examples.",
-                    "Unsupervised learning discovers structure without target labels.",
-                ],
-                "worked_example": {
-                    "problem": (
-                        "Classify these tasks: predicting an exam score, detecting spam, "
-                        "grouping customers without predefined types, and compressing image features."
-                    ),
-                    "solution": (
-                        "The first two tasks are supervised. Customer grouping and feature "
-                        "compression are unsupervised."
+        "lecture_sections": [
+            {
+                "title": "Supervised and Unsupervised Learning",
+                "minutes": 15,
+                "content": {
+                    "explanation": "Labels determine whether a model learns a prediction target.",
+                    "key_points": [
+                        "Supervised learning uses labelled examples.",
+                        "Unsupervised learning discovers structure without target labels.",
+                    ],
+                    "worked_example": {
+                        "problem": (
+                            "Classify these tasks: predicting an exam score, detecting spam, "
+                            "grouping customers without predefined types, and compressing image features."
+                        ),
+                        "solution": (
+                            "The first two tasks are supervised. Customer grouping and feature "
+                            "compression are unsupervised."
+                        ),
+                    },
+                    "teaching_tip": (
+                        "Draw one table with columns x and y and another with only x. Ask students "
+                        "which information the algorithm can use during training."
                     ),
                 },
-                "teaching_tip": (
-                    "Draw one table with columns x and y and another with only x. Ask students "
-                    "which information the algorithm can use during training."
+            }
+        ],
+        "mcqs": [
+            {
+                "question": "Why does a supervised model need a separate test set?",
+                "options": [
+                    "Estimate generalization",
+                    "Fit parameters",
+                    "Create labels",
+                    "Scale features",
+                ],
+                "answer": "A",
+                "explanation": (
+                    "The test set is not used to fit the model. It estimates performance on data "
+                    "that the model did not see during training."
                 ),
-            },
-        }],
-        "mcqs": [{
-            "question": "Why does a supervised model need a separate test set?",
-            "options": ["Estimate generalization", "Fit parameters", "Create labels", "Scale features"],
-            "answer": "A",
-            "explanation": (
-                "The test set is not used to fit the model. It estimates performance on data "
-                "that the model did not see during training."
-            ),
-        }],
-        "numerical_problems": [{
-            "problem": (
-                "A classifier is tested on 12 examples. Compare the true and predicted labels "
-                "and compute classification accuracy."
-            ),
-            "given": [
-                "Total examples n = 12",
-                "A correct prediction means the predicted label equals the true label",
-                "Accuracy = correct predictions / total predictions",
-            ],
-            "solution_steps": [
-                "Compare each pair of true and predicted labels.",
-                "Count nine correct predictions.",
-                "Divide 9 by 12 to obtain 0.75.",
-                "Convert the result to 75 percent.",
-            ],
-            "final_answer": "Accuracy = 0.75 = 75%.",
-        }],
+            }
+        ],
+        "numerical_problems": [
+            {
+                "problem": (
+                    "A classifier is tested on 12 examples. Compare the true and predicted labels "
+                    "and compute classification accuracy."
+                ),
+                "given": [
+                    "Total examples n = 12",
+                    "A correct prediction means the predicted label equals the true label",
+                    "Accuracy = correct predictions / total predictions",
+                ],
+                "solution_steps": [
+                    "Compare each pair of true and predicted labels.",
+                    "Count nine correct predictions.",
+                    "Divide 9 by 12 to obtain 0.75.",
+                    "Convert the result to 75 percent.",
+                ],
+                "final_answer": "Accuracy = 0.75 = 75%.",
+            }
+        ],
     }
 
     paths = create_artifacts(result, agent_type="teaching", output_dir=tmp_path)
     presentation = Presentation(next(path for path in paths if path.suffix == ".pptx"))
 
     section_slide = next(
-        slide for slide in presentation.slides
-        if any(getattr(shape, "text", "") == "Supervised and Unsupervised Learning"
-               for shape in slide.shapes)
+        slide
+        for slide in presentation.slides
+        if any(
+            getattr(shape, "text", "") == "Supervised and Unsupervised Learning"
+            for shape in slide.shapes
+        )
     )
-    application = next(shape for shape in section_slide.shapes if shape.text.startswith("APPLICATION"))
-    professor_note = next(
-        shape for shape in section_slide.shapes if shape.text.startswith("PROFESSOR NOTE")
+    application = next(
+        shape for shape in section_slide.shapes if shape.text.startswith("APPLICATION")
     )
-    assert application.top + application.height <= professor_note.top
+    professor_note_slide, professor_note = next(
+        (candidate_slide, shape)
+        for candidate_slide in presentation.slides
+        for shape in candidate_slide.shapes
+        if getattr(shape, "text", "").startswith("PROFESSOR NOTE")
+    )
+    if professor_note_slide == section_slide:
+        assert application.top + application.height <= professor_note.top
+    else:
+        assert any(
+            getattr(shape, "text", "") == "Supervised and Unsupervised Learning: Professor Guidance"
+            for shape in professor_note_slide.shapes
+        )
     assert "…" not in application.text
 
     numerical_slide = next(
-        slide for slide in presentation.slides
+        slide
+        for slide in presentation.slides
         if any(getattr(shape, "text", "") == "Numerical Problem 1" for shape in slide.shapes)
     )
     problem = next(shape for shape in numerical_slide.shapes if shape.text.startswith("PROBLEM"))
