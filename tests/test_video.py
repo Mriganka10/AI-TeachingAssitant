@@ -4,14 +4,18 @@ import wave
 from pathlib import Path
 
 import pytest
+from PIL import Image, ImageChops
 
 from app.artifacts.video import (
     VideoScene,
+    _concatenate_segments,
     _constrain_plan_narration,
     _create_elevenlabs_narration,
     _ffmpeg_executable,
+    _media_duration,
     _render_scene_frame,
     _render_segment,
+    _run_ffmpeg,
     _video_plan_issues,
     build_teaching_video_scenes,
     create_teaching_video,
@@ -96,10 +100,10 @@ def test_video_plan_rejects_brief_bullet_only_narration() -> None:
         ],
     }
 
-    issues = _video_plan_issues(plan, minimum_words=660, maximum_words=2200)
+    issues = _video_plan_issues(plan, minimum_words=760, maximum_words=2200)
 
     assert any("fuller explanation" in issue for issue in issues)
-    assert any("at least 660 words" in issue for issue in issues)
+    assert any("at least 760 words" in issue for issue in issues)
 
 
 def test_video_plan_safely_constrains_small_narration_overflow() -> None:
@@ -202,7 +206,7 @@ def test_video_script_uses_strict_schema_and_meets_long_form_budget(monkeypatch)
     )
 
     assert len(scenes) == 8
-    assert sum(len(scene.narration.split()) for scene in scenes) >= 660
+    assert sum(len(scene.narration.split()) for scene in scenes) >= 760
     text_format = captured["text"]["format"]
     assert text_format["type"] == "json_schema"
     assert text_format["strict"] is True
@@ -278,6 +282,90 @@ def test_multimedia_frame_and_narration_encode_to_playable_mp4(tmp_path: Path) -
 
     assert video_path.exists()
     assert video_path.stat().st_size > 10_000
+
+
+def test_multimedia_timeline_preserves_duration_and_changes_scenes(tmp_path: Path) -> None:
+    ffmpeg = _ffmpeg_executable()
+    segments: list[Path] = []
+    scenes = (
+        VideoScene(
+            section="OPENING",
+            title="Start with the learning question",
+            bullets=("Prior knowledge", "Learning goal"),
+            narration="Opening narration.",
+            visual_type="title",
+            visual_elements=("Question", "Goal"),
+            takeaway="Frame the lesson before adding details.",
+        ),
+        VideoScene(
+            section="PROCESS",
+            title="Follow the reasoning sequence",
+            bullets=("Observe", "Compare", "Conclude"),
+            narration="Process narration.",
+            visual_type="process",
+            visual_elements=("Observe", "Compare", "Conclude"),
+            takeaway="Reasoning should be visible and ordered.",
+        ),
+        VideoScene(
+            section="RECAP",
+            title="Connect the ideas",
+            bullets=("Question", "Evidence", "Conclusion"),
+            narration="Recap narration.",
+            visual_type="recap",
+            visual_elements=("Question", "Evidence", "Conclusion"),
+            takeaway="The conclusion follows from the evidence.",
+        ),
+    )
+    sample_rate = 44_100
+    for index, scene in enumerate(scenes, start=1):
+        frame_path = tmp_path / f"frame-{index}.png"
+        audio_path = tmp_path / f"audio-{index}.wav"
+        segment_path = tmp_path / f"segment-{index}.mp4"
+        _render_scene_frame(scene, frame_path, index=index, total=len(scenes))
+        with wave.open(str(audio_path), "wb") as audio:
+            audio.setnchannels(1)
+            audio.setsampwidth(2)
+            audio.setframerate(sample_rate)
+            frames = b"".join(
+                struct.pack(
+                    "<h",
+                    int(1200 * math.sin(2 * math.pi * (180 + index * 40) * i / sample_rate)),
+                )
+                for i in range(sample_rate)
+            )
+            audio.writeframes(frames)
+        _render_segment(
+            ffmpeg,
+            frame_path,
+            audio_path,
+            segment_path,
+            1.2,
+            scene_index=index,
+        )
+        segments.append(segment_path)
+
+    video_path = tmp_path / "lesson.mp4"
+    _concatenate_segments(ffmpeg, segments, video_path, 30)
+
+    assert _media_duration(ffmpeg, video_path) == pytest.approx(3.6, abs=0.15)
+    extracted: list[Path] = []
+    for index, timestamp in enumerate((0.6, 1.8, 3.0), start=1):
+        image_path = tmp_path / f"sample-{index}.png"
+        _run_ffmpeg(
+            ffmpeg,
+            "-ss",
+            str(timestamp),
+            "-i",
+            str(video_path),
+            "-frames:v",
+            "1",
+            image_path.as_posix(),
+        )
+        extracted.append(image_path)
+
+    images = [Image.open(image_path).convert("RGB") for image_path in extracted]
+    assert ImageChops.difference(images[0], images[1]).getbbox() is not None
+    assert ImageChops.difference(images[1], images[2]).getbbox() is not None
 
 
 def test_elevenlabs_uses_non_pro_mp3_and_converts_to_wav(tmp_path: Path, monkeypatch) -> None:

@@ -65,6 +65,11 @@ create a silent placeholder because that could be mistaken for a finished explan
 
 The default ElevenLabs format is `mp3_44100_128`, which the application converts to WAV locally
 before video assembly. Do not set `pcm_44100` unless the ElevenLabs account is on Pro or above.
+Keep `VIDEO_TTS_SPEED` between `0.75` and `1.20`; the default `0.95` is recommended for clear
+academic narration. The renderer rejects unexpectedly short narration instead of returning a
+one-minute or mostly silent lesson. It rebuilds the final audio/video timeline, verifies that the
+MP4 is at least `VIDEO_MIN_MINUTES`, and uses alternating pan/zoom motion plus visible transitions
+between the storyboard's distinct scenes.
 
 Generate an application secret:
 

@@ -78,7 +78,9 @@ Generated artifacts:
 - optional 16:9 multimedia MP4 derived from the validated teaching package. A second structured
   storyboard pass turns the package into a coherent mini-lecture with concept maps, comparisons,
   processes, worked examples, formulas, applications, misconceptions, and a recap. Duration is
-  normally 4–15 minutes, with a hard 15-minute limit and an on-screen AI-voice disclosure.
+  verified at 4–15 minutes, with distinct scene changes, alternating pan/zoom motion, transition
+  fades, a hard 15-minute limit, and an on-screen AI-voice disclosure. The renderer rejects
+  unexpectedly short narration or an invalid final timeline instead of publishing a partial MP4.
 
 All visual exporters normalize MCQ option labels before numbering them, so an option is rendered
 once as `A. option text` even if a model response includes its own prefix. Mathematical notation is

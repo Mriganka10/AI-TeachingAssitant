@@ -19,8 +19,9 @@ from app.core.config import settings
 FRAME_WIDTH = 1280
 FRAME_HEIGHT = 720
 WORDS_PER_MINUTE = 138
-SCRIPT_WORDS_PER_MINUTE = 165
+SCRIPT_WORDS_PER_MINUTE = 190
 MAX_TTS_CHARACTERS = 3900
+MINIMUM_AUDIO_COVERAGE = 0.80
 VISUAL_TYPES = (
     "title",
     "concept_map",
@@ -38,7 +39,7 @@ VIDEO_PLAN_SCHEMA = {
     "type": "object",
     "properties": {
         "title": {"type": "string"},
-        "target_duration_seconds": {"type": "integer", "minimum": 180, "maximum": 900},
+        "target_duration_seconds": {"type": "integer", "minimum": 240, "maximum": 900},
         "scenes": {
             "type": "array",
             "minItems": 8,
@@ -94,7 +95,7 @@ class VideoScene:
 
 
 def create_teaching_video(result: dict, path: Path) -> Path:
-    """Render a 16:9 narrated explainer video whose duration never exceeds the configured cap."""
+    """Render a verified 16:9 explainer that stays within the configured duration range."""
     if not settings.video_generation_enabled:
         raise RuntimeError("Video generation is disabled by VIDEO_GENERATION_ENABLED.")
     if settings.llm_service_mode.lower() == "mock":
@@ -117,29 +118,69 @@ def create_teaching_video(result: dict, path: Path) -> Path:
 
     path.parent.mkdir(parents=True, exist_ok=True)
     ffmpeg = _ffmpeg_executable()
+    minimum_seconds = min(15, max(4, settings.video_min_minutes)) * 60
     maximum_seconds = min(15, max(1, settings.video_max_minutes)) * 60
 
     with TemporaryDirectory(prefix="professor-video-", dir=path.parent) as workspace_name:
         workspace = Path(workspace_name)
+        prepared: list[tuple[VideoScene, Path, Path, float]] = []
+        narration_seconds = 0.0
+        for index, scene in enumerate(scenes, start=1):
+            frame = workspace / f"scene-{index:02d}.png"
+            audio = workspace / f"scene-{index:02d}.wav"
+            _render_scene_frame(scene, frame, index=index, total=len(scenes))
+            _create_narration(scene.narration, audio)
+            audio_seconds = _wav_duration(audio)
+            if audio_seconds <= 0.1:
+                raise RuntimeError(f"Narration for scene {index} was empty or unreadable.")
+            prepared.append((scene, frame, audio, audio_seconds))
+            narration_seconds += audio_seconds
+
+        # A four-minute lesson must contain substantial spoken explanation, not a minute of speech
+        # followed by several minutes of silence. Small provider differences are filled with
+        # deliberate visual breathing room after each scene.
+        minimum_spoken_seconds = minimum_seconds * MINIMUM_AUDIO_COVERAGE
+        if narration_seconds < minimum_spoken_seconds:
+            narration_words = sum(len(scene.narration.split()) for scene in scenes)
+            raise RuntimeError(
+                "The narration service returned audio that is too short for a complete lesson "
+                f"({narration_seconds:.1f}s for {narration_words} words; at least "
+                f"{minimum_spoken_seconds:.0f}s is required). Check VIDEO_TTS_SPEED and the "
+                "selected voice/provider, then generate the video again."
+            )
+
+        normal_pause_total = len(prepared) * 0.45
+        required_pause_total = max(0.0, minimum_seconds - narration_seconds)
+        pause_per_scene = max(normal_pause_total, required_pause_total) / len(prepared)
         segments: list[Path] = []
         elapsed = 0.0
-        for index, scene in enumerate(scenes, start=1):
+        for index, (_, frame, audio, audio_seconds) in enumerate(prepared, start=1):
             remaining = maximum_seconds - elapsed
             if remaining < 2:
                 break
-            frame = workspace / f"scene-{index:02d}.png"
-            audio = workspace / f"scene-{index:02d}.wav"
             segment = workspace / f"scene-{index:02d}.mp4"
-            _render_scene_frame(scene, frame, index=index, total=len(scenes))
-            _create_narration(scene.narration, audio)
-            duration = min(_wav_duration(audio) + 0.35, remaining)
-            _render_segment(ffmpeg, frame, audio, segment, duration)
+            duration = min(audio_seconds + pause_per_scene, remaining)
+            _render_segment(ffmpeg, frame, audio, segment, duration, scene_index=index)
             segments.append(segment)
             elapsed += duration
 
         if not segments:
             raise RuntimeError("Video rendering produced no playable scenes.")
         _concatenate_segments(ffmpeg, segments, path, maximum_seconds)
+
+    rendered_seconds = _media_duration(ffmpeg, path)
+    if rendered_seconds < minimum_seconds - 1.0:
+        path.unlink(missing_ok=True)
+        raise RuntimeError(
+            "Video verification failed: the rendered timeline is only "
+            f"{rendered_seconds:.1f}s, but the configured minimum is {minimum_seconds}s."
+        )
+    if rendered_seconds > maximum_seconds + 1.0:
+        path.unlink(missing_ok=True)
+        raise RuntimeError(
+            "Video verification failed: the rendered timeline exceeds the configured "
+            f"{maximum_seconds}s limit."
+        )
 
     if not path.exists() or path.stat().st_size == 0:
         raise RuntimeError("Video rendering did not produce a playable MP4 file.")
@@ -153,7 +194,7 @@ def generate_teaching_video_plan(
     if not settings.openai_api_key:
         raise RuntimeError("OPENAI_API_KEY is required to prepare the teaching-video script.")
 
-    minimum = min(15, max(1, min_minutes))
+    minimum = min(15, max(4, min_minutes))
     maximum = min(15, max(minimum, max_minutes))
     source_word_count = len(_text(result).split())
     target_minutes = min(maximum, max(minimum, round(2 + source_word_count / 500)))
@@ -910,8 +951,22 @@ def _font(size: int, *, bold: bool = False):
     return ImageFont.load_default()
 
 
-def _render_segment(ffmpeg: str, frame: Path, audio: Path, output: Path, duration: float) -> None:
+def _render_segment(
+    ffmpeg: str,
+    frame: Path,
+    audio: Path,
+    output: Path,
+    duration: float,
+    *,
+    scene_index: int = 1,
+) -> None:
     fade_out = max(0.0, duration - 0.35)
+    if scene_index % 2:
+        x_expression = "iw/2-(iw/zoom/2)"
+        y_expression = "ih/2-(ih/zoom/2)"
+    else:
+        x_expression = "min((iw-iw/zoom)*(on/(30*12)),iw-iw/zoom)"
+        y_expression = "min((ih-ih/zoom)*(on/(30*12)),ih-ih/zoom)"
     _run_ffmpeg(
         ffmpeg,
         "-loop",
@@ -926,10 +981,12 @@ def _render_segment(ffmpeg: str, frame: Path, audio: Path, output: Path, duratio
         "30",
         "-vf",
         (
-            "zoompan=z='min(zoom+0.00012,1.045)':"
-            "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=1280x720:fps=30,"
+            "zoompan=z='min(zoom+0.00018,1.055)':"
+            f"x='{x_expression}':y='{y_expression}':d=1:s=1280x720:fps=30,"
             f"fade=t=in:st=0:d=0.30,fade=t=out:st={fade_out:.3f}:d=0.35"
         ),
+        "-af",
+        f"apad=pad_dur={duration:.3f}",
         "-c:v",
         "libx264",
         "-preset",
@@ -944,7 +1001,6 @@ def _render_segment(ffmpeg: str, frame: Path, audio: Path, output: Path, duratio
         "2",
         "-b:a",
         "128k",
-        "-shortest",
         str(output),
     )
 
@@ -952,26 +1008,70 @@ def _render_segment(ffmpeg: str, frame: Path, audio: Path, output: Path, duratio
 def _concatenate_segments(
     ffmpeg: str, segments: list[Path], output: Path, maximum_seconds: int
 ) -> None:
-    manifest = segments[0].parent / "segments.txt"
-    manifest.write_text(
-        "".join(f"file '{segment.name}'\n" for segment in segments), encoding="utf-8"
+    inputs = [argument for segment in segments for argument in ("-i", str(segment))]
+    prepared_streams: list[str] = []
+    concat_inputs: list[str] = []
+    for index in range(len(segments)):
+        prepared_streams.extend(
+            (
+                f"[{index}:v]setpts=PTS-STARTPTS[v{index}]",
+                f"[{index}:a]aresample=async=1:first_pts=0,asetpts=PTS-STARTPTS[a{index}]",
+            )
+        )
+        concat_inputs.extend((f"[v{index}]", f"[a{index}]"))
+    filter_complex = (
+        ";".join(prepared_streams)
+        + ";"
+        + "".join(concat_inputs)
+        + f"concat=n={len(segments)}:v=1:a=1[outv][outa]"
     )
     _run_ffmpeg(
         ffmpeg,
-        "-f",
-        "concat",
-        "-safe",
-        "0",
-        "-i",
-        str(manifest),
+        *inputs,
+        "-filter_complex",
+        filter_complex,
+        "-map",
+        "[outv]",
+        "-map",
+        "[outa]",
         "-t",
         str(maximum_seconds),
-        "-c",
-        "copy",
+        "-r",
+        "30",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-ar",
+        "44100",
+        "-ac",
+        "2",
+        "-b:a",
+        "128k",
         "-movflags",
         "+faststart",
         str(output),
     )
+
+
+def _media_duration(ffmpeg: str, path: Path) -> float:
+    """Read a media duration with the bundled FFmpeg, avoiding a separate ffprobe dependency."""
+    completed = subprocess.run(
+        [ffmpeg, "-hide_banner", "-i", str(path)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    details = "\n".join(part for part in (completed.stderr, completed.stdout) if part)
+    match = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", details)
+    if not match:
+        raise RuntimeError("Video verification failed because its duration could not be read.")
+    hours, minutes, seconds = match.groups()
+    return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
 
 
 def _run_ffmpeg(ffmpeg: str, *arguments: str) -> None:
