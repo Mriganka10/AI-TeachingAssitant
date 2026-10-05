@@ -16,6 +16,8 @@ from app.artifacts.video import (
     _render_scene_frame,
     _render_segment,
     _run_ffmpeg,
+    _trim_narration_silence,
+    _verify_scene_progression,
     _video_plan_issues,
     build_teaching_video_scenes,
     create_teaching_video,
@@ -346,6 +348,7 @@ def test_multimedia_timeline_preserves_duration_and_changes_scenes(tmp_path: Pat
 
     video_path = tmp_path / "lesson.mp4"
     _concatenate_segments(ffmpeg, segments, video_path, 30)
+    _verify_scene_progression(ffmpeg, video_path, [1.2] * len(scenes))
 
     assert _media_duration(ffmpeg, video_path) == pytest.approx(3.6, abs=0.15)
     extracted: list[Path] = []
@@ -366,6 +369,62 @@ def test_multimedia_timeline_preserves_duration_and_changes_scenes(tmp_path: Pat
     images = [Image.open(image_path).convert("RGB") for image_path in extracted]
     assert ImageChops.difference(images[0], images[1]).getbbox() is not None
     assert ImageChops.difference(images[1], images[2]).getbbox() is not None
+
+
+def test_narration_trims_a_long_silent_tail_before_scene_timing(tmp_path: Path) -> None:
+    audio_path = tmp_path / "narration.wav"
+    sample_rate = 16_000
+    voiced = b"".join(
+        struct.pack("<h", int(4000 * math.sin(2 * math.pi * 220 * i / sample_rate)))
+        for i in range(sample_rate)
+    )
+    with wave.open(str(audio_path), "wb") as audio:
+        audio.setnchannels(1)
+        audio.setsampwidth(2)
+        audio.setframerate(sample_rate)
+        audio.writeframes(voiced + b"\x00\x00" * sample_rate * 12)
+
+    duration = _trim_narration_silence(audio_path)
+
+    assert 1.0 <= duration <= 1.8
+    with wave.open(str(audio_path), "rb") as trimmed:
+        assert trimmed.getnframes() / trimmed.getframerate() == pytest.approx(duration, abs=0.01)
+
+
+def test_narration_handles_streaming_wav_with_open_ended_header(tmp_path: Path) -> None:
+    audio_path = tmp_path / "streaming.wav"
+    sample_rate = 16_000
+    with wave.open(str(audio_path), "wb") as audio:
+        audio.setnchannels(1)
+        audio.setsampwidth(2)
+        audio.setframerate(sample_rate)
+        audio.writeframes(b"\x20\x03" * sample_rate + b"\x00\x00" * sample_rate * 2)
+
+    # Streaming providers commonly use 0xFFFFFFFF as an unknown data length.
+    raw = bytearray(audio_path.read_bytes())
+    struct.pack_into("<L", raw, 4, 0xFFFFFFFF)
+    struct.pack_into("<L", raw, 40, 0xFFFFFFFF)
+    audio_path.write_bytes(raw)
+
+    duration = _trim_narration_silence(audio_path)
+
+    assert 1.0 <= duration <= 1.8
+    with wave.open(str(audio_path), "rb") as trimmed:
+        assert trimmed.getnframes() / trimmed.getframerate() == pytest.approx(duration, abs=0.01)
+
+
+def test_scene_progression_rejects_an_unchanging_video(tmp_path: Path) -> None:
+    ffmpeg = _ffmpeg_executable()
+    frame = tmp_path / "single-frame.png"
+    Image.new("RGB", (1280, 720), "#2557D6").save(frame)
+    video = tmp_path / "unchanging.mp4"
+    _run_ffmpeg(
+        ffmpeg, "-loop", "1", "-i", str(frame), "-t", "3.6", "-r", "30",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", str(video),
+    )
+
+    with pytest.raises(RuntimeError, match="no visible change"):
+        _verify_scene_progression(ffmpeg, video, [1.2, 1.2, 1.2])
 
 
 def test_elevenlabs_uses_non_pro_mp3_and_converts_to_wav(tmp_path: Path, monkeypatch) -> None:

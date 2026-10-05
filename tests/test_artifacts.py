@@ -147,6 +147,7 @@ def test_exporters_preserve_math_and_normalize_mcq_labels(tmp_path: Path) -> Non
                 "Prediction: ŷ = f(x)",
                 "MSE = (1/n) Σ_i (y_i - ŷ_i)^2",
                 "Centroid μ_k ≈ 3.2",
+                "Distance = √((a_1 - b_1)^2 + (a_2 - b_2)^2)",
             ],
         },
         "mcqs": [
@@ -164,6 +165,7 @@ def test_exporters_preserve_math_and_normalize_mcq_labels(tmp_path: Path) -> Non
                 "solution_steps": [
                     "Errors y - ŷ = [-1, 1].",
                     "MSE = (1/2) Σ_i (y_i - ŷ_i)^2 = 1.",
+                    "Distance = √((a_1 - b_1)^2 + (a_2 - b_2)^2).",
                 ],
                 "final_answer": "MSE = 1.",
             }
@@ -189,7 +191,10 @@ def test_exporters_preserve_math_and_normalize_mcq_labels(tmp_path: Path) -> Non
         assert "B. B) Second" not in exported_text
         assert "ŷ" in exported_text
         assert "Σ" in exported_text
+        assert "₁" in exported_text
+        assert "₂" in exported_text
         assert "■" not in exported_text
+        assert "□" not in exported_text
 
     with ZipFile(by_suffix[".docx"]) as archive:
         document_xml = archive.read("word/document.xml").decode("utf-8")

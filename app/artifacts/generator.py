@@ -134,17 +134,19 @@ def _contains_math(text: Any) -> bool:
 
 
 def _register_pdf_fonts() -> tuple[str, str]:
-    """Register an embedded Unicode font so mathematical glyphs never become squares."""
+    """Register an embedded font that actually contains our mathematical glyphs."""
     global _PDF_FONT_REGULAR, _PDF_FONT_BOLD
     if _PDF_FONT_REGULAR != "Helvetica":
         return _PDF_FONT_REGULAR, _PDF_FONT_BOLD
 
     candidates = [
-        (Path("C:/Windows/Fonts/arial.ttf"), Path("C:/Windows/Fonts/arialbd.ttf")),
+        (Path("C:/Windows/Fonts/segoeui.ttf"), Path("C:/Windows/Fonts/segoeuib.ttf")),
+        (Path("C:/Windows/Fonts/calibri.ttf"), Path("C:/Windows/Fonts/calibrib.ttf")),
         (
             Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
             Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
         ),
+        (Path("C:/Windows/Fonts/arial.ttf"), Path("C:/Windows/Fonts/arialbd.ttf")),
         (
             Path(pdfmetrics.__file__).resolve().parents[1] / "fonts" / "Vera.ttf",
             Path(pdfmetrics.__file__).resolve().parents[1] / "fonts" / "VeraBd.ttf",
@@ -154,8 +156,17 @@ def _register_pdf_fonts() -> tuple[str, str]:
         if not (regular_path.exists() and bold_path.exists()):
             continue
         try:
-            pdfmetrics.registerFont(TTFont("ProfessorSans", str(regular_path)))
-            pdfmetrics.registerFont(TTFont("ProfessorSans-Bold", str(bold_path)))
+            regular = TTFont("ProfessorSans", str(regular_path))
+            bold = TTFont("ProfessorSans-Bold", str(bold_path))
+            required = "₀₁₂₃₄₅₆₇₈₉ᵢⱼₙ⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻Σŷμ√−"
+            if any(
+                ord(character) not in font.face.charToGlyph
+                for font in (regular, bold)
+                for character in required
+            ):
+                continue
+            pdfmetrics.registerFont(regular)
+            pdfmetrics.registerFont(bold)
             pdfmetrics.registerFontFamily(
                 "ProfessorSans",
                 normal="ProfessorSans",

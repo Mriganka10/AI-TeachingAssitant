@@ -5,11 +5,15 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import sys
 import textwrap
 import urllib.error
 import urllib.request
 import wave
+from array import array
 from dataclasses import dataclass, replace
+from io import BytesIO
+from itertools import pairwise
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -22,6 +26,8 @@ WORDS_PER_MINUTE = 138
 SCRIPT_WORDS_PER_MINUTE = 190
 MAX_TTS_CHARACTERS = 3900
 MINIMUM_AUDIO_COVERAGE = 0.80
+MAX_AUDIO_TEMPO = 1.15
+SCENE_ACCENTS = ("#2B6DE8", "#0D93A9", "#7255C9", "#168664", "#B96E22")
 VISUAL_TYPES = (
     "title",
     "concept_map",
@@ -130,16 +136,26 @@ def create_teaching_video(result: dict, path: Path) -> Path:
             audio = workspace / f"scene-{index:02d}.wav"
             _render_scene_frame(scene, frame, index=index, total=len(scenes))
             _create_narration(scene.narration, audio)
-            audio_seconds = _wav_duration(audio)
+            audio_seconds = _trim_narration_silence(audio)
             if audio_seconds <= 0.1:
                 raise RuntimeError(f"Narration for scene {index} was empty or unreadable.")
+            narration_words = len(scene.narration.split())
+            slowest_reasonable_seconds = max(60.0, narration_words * 60 / 75)
+            if audio_seconds > slowest_reasonable_seconds:
+                raise RuntimeError(
+                    f"Narration for scene {index} is unusually long for {narration_words} "
+                    f"words ({audio_seconds:.1f}s). Retry the speech provider."
+                )
             prepared.append((scene, frame, audio, audio_seconds))
             narration_seconds += audio_seconds
 
         # A four-minute lesson must contain substantial spoken explanation, not a minute of speech
         # followed by several minutes of silence. Small provider differences are filled with
         # deliberate visual breathing room after each scene.
-        minimum_spoken_seconds = minimum_seconds * MINIMUM_AUDIO_COVERAGE
+        minimum_spoken_seconds = max(
+            minimum_seconds * MINIMUM_AUDIO_COVERAGE,
+            minimum_seconds - len(prepared) * 1.0,
+        )
         if narration_seconds < minimum_spoken_seconds:
             narration_words = sum(len(scene.narration.split()) for scene in scenes)
             raise RuntimeError(
@@ -150,37 +166,45 @@ def create_teaching_video(result: dict, path: Path) -> Path:
             )
 
         normal_pause_total = len(prepared) * 0.45
-        required_pause_total = max(0.0, minimum_seconds - narration_seconds)
+        tempo = max(1.0, (narration_seconds + normal_pause_total) / maximum_seconds)
+        if tempo > MAX_AUDIO_TEMPO:
+            raise RuntimeError(
+                "The narration exceeds the 15-minute video limit even with a modest pace "
+                "adjustment. Regenerate a shorter storyboard."
+            )
+        playback_seconds = narration_seconds / tempo
+        required_pause_total = max(0.0, minimum_seconds - playback_seconds)
         pause_per_scene = max(normal_pause_total, required_pause_total) / len(prepared)
+        if playback_seconds + pause_per_scene * len(prepared) > maximum_seconds + 0.1:
+            pause_per_scene = max(0.0, (maximum_seconds - playback_seconds) / len(prepared))
+        scene_durations = [audio_seconds / tempo + pause_per_scene for _, _, _, audio_seconds in prepared]
         segments: list[Path] = []
-        elapsed = 0.0
-        for index, (_, frame, audio, audio_seconds) in enumerate(prepared, start=1):
-            remaining = maximum_seconds - elapsed
-            if remaining < 2:
-                break
+        for index, ((_, frame, audio, _), duration) in enumerate(
+            zip(prepared, scene_durations, strict=True), start=1
+        ):
             segment = workspace / f"scene-{index:02d}.mp4"
-            duration = min(audio_seconds + pause_per_scene, remaining)
-            _render_segment(ffmpeg, frame, audio, segment, duration, scene_index=index)
+            _render_segment(
+                ffmpeg, frame, audio, segment, duration, scene_index=index, tempo=tempo
+            )
             segments.append(segment)
-            elapsed += duration
 
-        if not segments:
-            raise RuntimeError("Video rendering produced no playable scenes.")
-        _concatenate_segments(ffmpeg, segments, path, maximum_seconds)
-
-    rendered_seconds = _media_duration(ffmpeg, path)
-    if rendered_seconds < minimum_seconds - 1.0:
-        path.unlink(missing_ok=True)
-        raise RuntimeError(
-            "Video verification failed: the rendered timeline is only "
-            f"{rendered_seconds:.1f}s, but the configured minimum is {minimum_seconds}s."
-        )
-    if rendered_seconds > maximum_seconds + 1.0:
-        path.unlink(missing_ok=True)
-        raise RuntimeError(
-            "Video verification failed: the rendered timeline exceeds the configured "
-            f"{maximum_seconds}s limit."
-        )
+        if len(segments) != len(scenes):
+            raise RuntimeError("Video rendering did not include every storyboard scene.")
+        rendered = workspace / "verified-explainer.mp4"
+        _concatenate_segments(ffmpeg, segments, rendered, maximum_seconds)
+        rendered_seconds = _media_duration(ffmpeg, rendered)
+        if rendered_seconds < minimum_seconds - 1.0:
+            raise RuntimeError(
+                "Video verification failed: the rendered timeline is only "
+                f"{rendered_seconds:.1f}s, but the configured minimum is {minimum_seconds}s."
+            )
+        if rendered_seconds > maximum_seconds + 1.0:
+            raise RuntimeError(
+                "Video verification failed: the rendered timeline exceeds the configured "
+                f"{maximum_seconds}s limit."
+            )
+        _verify_scene_progression(ffmpeg, rendered, scene_durations)
+        rendered.replace(path)
 
     if not path.exists() or path.stat().st_size == 0:
         raise RuntimeError("Video rendering did not produce a playable MP4 file.")
@@ -645,6 +669,7 @@ def _render_scene_frame(scene: VideoScene, path: Path, *, index: int, total: int
 
     image = Image.new("RGB", (FRAME_WIDTH, FRAME_HEIGHT), "#07152E")
     draw = ImageDraw.Draw(image)
+    accent = SCENE_ACCENTS[(index - 1) % len(SCENE_ACCENTS)]
     for y in range(FRAME_HEIGHT):
         ratio = y / FRAME_HEIGHT
         draw.line(
@@ -654,8 +679,8 @@ def _render_scene_frame(scene: VideoScene, path: Path, *, index: int, total: int
     draw.ellipse((930, -210, 1430, 290), fill="#123D75")
     draw.ellipse((-230, 510, 310, 1050), fill="#0E315F")
     draw.rounded_rectangle((54, 42, 1226, 662), radius=30, fill="#F9FBFF")
-    draw.rectangle((54, 42, 1226, 54), fill="#2B6DE8")
-    draw.text((84, 72), scene.section.upper(), font=_font(18, bold=True), fill="#2B6DE8")
+    draw.rectangle((54, 42, 1226, 54), fill=accent)
+    draw.text((84, 72), scene.section.upper(), font=_font(18, bold=True), fill=accent)
     draw.text((1120, 74), f"{index:02d}/{total:02d}", font=_font(17, bold=True), fill="#667386")
 
     if scene.visual_type == "title":
@@ -676,7 +701,7 @@ def _render_scene_frame(scene: VideoScene, path: Path, *, index: int, total: int
     _draw_takeaway(draw, scene.takeaway or _summary_from_narration(scene.narration))
     progress_width = int(1110 * index / max(1, total))
     draw.rounded_rectangle((84, 638, 1194, 644), radius=3, fill="#DDE5F0")
-    draw.rounded_rectangle((84, 638, 84 + progress_width, 644), radius=3, fill="#2B6DE8")
+    draw.rounded_rectangle((84, 638, 84 + progress_width, 644), radius=3, fill=accent)
     image.save(path, format="PNG")
 
 
@@ -959,6 +984,7 @@ def _render_segment(
     duration: float,
     *,
     scene_index: int = 1,
+    tempo: float = 1.0,
 ) -> None:
     fade_out = max(0.0, duration - 0.35)
     if scene_index % 2:
@@ -967,6 +993,8 @@ def _render_segment(
     else:
         x_expression = "min((iw-iw/zoom)*(on/(30*12)),iw-iw/zoom)"
         y_expression = "min((ih-ih/zoom)*(on/(30*12)),ih-ih/zoom)"
+    audio_seconds = _wav_duration(audio)
+    audio_padding = max(0.0, duration - audio_seconds / tempo)
     _run_ffmpeg(
         ffmpeg,
         "-loop",
@@ -986,7 +1014,7 @@ def _render_segment(
             f"fade=t=in:st=0:d=0.30,fade=t=out:st={fade_out:.3f}:d=0.35"
         ),
         "-af",
-        f"apad=pad_dur={duration:.3f}",
+        f"atempo={tempo:.4f},apad=pad_dur={audio_padding:.3f}",
         "-c:v",
         "libx264",
         "-preset",
@@ -1001,6 +1029,7 @@ def _render_segment(
         "2",
         "-b:a",
         "128k",
+        "-shortest",
         str(output),
     )
 
@@ -1074,6 +1103,37 @@ def _media_duration(ffmpeg: str, path: Path) -> float:
     return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
 
 
+def _verify_scene_progression(ffmpeg: str, path: Path, durations: list[float]) -> None:
+    """Reject a video that encodes a long first scene but never reaches later scenes."""
+    if len(durations) < 3:
+        raise RuntimeError("A teaching video needs at least three distinct scenes.")
+    from PIL import Image, ImageChops, ImageStat
+
+    samples = []
+    elapsed = 0.0
+    selected = {0, len(durations) // 2, len(durations) - 1}
+    for index, duration in enumerate(durations):
+        if index in selected:
+            position = elapsed + min(duration / 2, max(0.5, duration - 0.5))
+            completed = subprocess.run(
+                [
+                    ffmpeg, "-hide_banner", "-loglevel", "error", "-ss", f"{position:.3f}",
+                    "-i", str(path), "-frames:v", "1", "-f", "image2pipe", "-vcodec", "png", "-",
+                ],
+                check=False,
+                capture_output=True,
+            )
+            if completed.returncode or not completed.stdout:
+                raise RuntimeError(f"Video verification could not read scene {index + 1}.")
+            with Image.open(BytesIO(completed.stdout)) as frame:
+                samples.append(frame.convert("RGB").crop((70, 65, 1210, 555)))
+        elapsed += duration
+    for first, second in pairwise(samples):
+        difference = ImageChops.difference(first, second)
+        if sum(ImageStat.Stat(difference).mean) / 3 < 1.5:
+            raise RuntimeError("Video verification found no visible change between planned scenes.")
+
+
 def _run_ffmpeg(ffmpeg: str, *arguments: str) -> None:
     try:
         subprocess.run(
@@ -1102,6 +1162,60 @@ def _wav_duration(path: Path) -> float:
     try:
         with wave.open(str(path), "rb") as audio:
             return audio.getnframes() / max(1, audio.getframerate())
+    except wave.Error as exc:
+        raise RuntimeError("The narration service returned invalid WAV audio.") from exc
+
+
+def _trim_narration_silence(path: Path) -> float:
+    """Measure speech-bearing PCM and remove provider-added silence at the end of a WAV."""
+    replacement: Path | None = None
+    try:
+        with wave.open(str(path), "rb") as source:
+            if source.getsampwidth() != 2:
+                raise RuntimeError("The narration service must return 16-bit PCM WAV audio.")
+            sample_rate = source.getframerate()
+            declared_frames = source.getnframes()
+            actual_frames = 0
+            window_frames = max(1, int(sample_rate * 0.2))
+            peaks: list[int] = []
+            while samples := source.readframes(window_frames):
+                actual_frames += len(samples) // (source.getnchannels() * source.getsampwidth())
+                values = array("h")
+                values.frombytes(samples)
+                if sys.byteorder != "little":
+                    values.byteswap()
+                peaks.append(max((abs(value) for value in values), default=0))
+            if not peaks:
+                return 0.0
+            threshold = max(160, int(max(peaks) * 0.0125))
+            active = [index for index, peak in enumerate(peaks) if peak >= threshold]
+            if not active:
+                return 0.0
+            keep_frames = min(actual_frames, (active[-1] + 1) * window_frames + int(sample_rate * 0.4))
+            duration = keep_frames / sample_rate
+            if actual_frames - keep_frames < sample_rate and declared_frames == actual_frames:
+                return actual_frames / sample_rate
+            replacement = path.with_suffix(".trimmed.wav")
+            try:
+                source.rewind()
+                with wave.open(str(replacement), "wb") as trimmed:
+                    # Streaming TTS can declare an open-ended WAV data size. Copying
+                    # that value into a new RIFF header overflows its 32-bit length.
+                    trimmed.setparams(source.getparams()._replace(nframes=keep_frames))
+                    remaining = keep_frames
+                    while remaining:
+                        count = min(remaining, sample_rate)
+                        chunk = source.readframes(count)
+                        if not chunk:
+                            raise RuntimeError("Narration audio ended before its measured duration.")
+                        trimmed.writeframesraw(chunk)
+                        remaining -= len(chunk) // (source.getnchannels() * source.getsampwidth())
+            except BaseException:
+                replacement.unlink(missing_ok=True)
+                raise
+        if replacement is not None:
+            replacement.replace(path)
+        return duration
     except wave.Error as exc:
         raise RuntimeError("The narration service returned invalid WAV audio.") from exc
 

@@ -70,6 +70,11 @@ academic narration. The renderer rejects unexpectedly short narration instead of
 one-minute or mostly silent lesson. It rebuilds the final audio/video timeline, verifies that the
 MP4 is at least `VIDEO_MIN_MINUTES`, and uses alternating pan/zoom motion plus visible transitions
 between the storyboard's distinct scenes.
+Speech services may return a WAV with a long silent tail. The application now measures audible
+samples, trims that tail, allocates time to every planned scene, and checks the completed MP4 for
+visual progression. If a provider returns too little usable speech, the video reports a warning
+while JSON, DOCX, PDF, and PPTX remain available. Existing MP4 downloads are not changed; generate
+a new teaching job to test the updated renderer.
 
 Generate an application secret:
 
