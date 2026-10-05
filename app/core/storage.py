@@ -9,9 +9,21 @@ def safe_part(value: str) -> str:
     return "".join(c if c.isalnum() or c in "-_." else "-" for c in value).strip("-") or "item"
 
 
+def safe_filename(value: str, max_length: int = 48) -> str:
+    """Keep internal object keys short while preserving the user-facing artifact filename."""
+    cleaned = safe_part(value)
+    if len(cleaned) <= max_length:
+        return cleaned
+    suffix = Path(cleaned).suffix[:10]
+    stem = Path(cleaned).stem
+    digest = hashlib.sha256(cleaned.encode()).hexdigest()[:8]
+    available = max(8, max_length - len(suffix) - len(digest) - 1)
+    return f"{stem[:available]}-{digest}{suffix}"
+
+
 class StorageService:
     def save(self, source: Path, *, tenant_id: str, category: str, object_id: str) -> str:
-        filename = safe_part(source.name)
+        filename = safe_filename(source.name)
         key = (
             f"{settings.s3_prefix.strip('/')}/tenants/{safe_part(tenant_id)}/"
             f"{safe_part(category)}/{safe_part(object_id)}/{filename}"

@@ -2,7 +2,7 @@
 
 A deployable, multi-tenant baseline for two professor-facing agents:
 
-1. **AI Teaching Assistant** — creates lecture structure, PPTX, notes, MCQs, assignments,
+1. **AI Teaching Assistant** — creates lecture structure, PPTX, optional multimedia MP4, notes, MCQs, assignments,
    numerical problems, Bloom's taxonomy mapping, case discussions, and viva questions.
 2. **Research Paper Assistant** — synthesizes uploaded papers into a literature review,
    methodology comparison, research gaps, research questions, future scope, methodology
@@ -130,7 +130,10 @@ pytest
 ## Current production behavior and boundaries
 
 - Production agent execution uses SQS and a separate worker service: API calls enqueue work
-  quickly, the UI polls job status, and completed jobs expose JSON, DOCX, PDF, and PPTX artifacts.
+  quickly, the UI polls job status, and completed teaching jobs expose JSON, DOCX, PDF, PPTX, and
+  an optional content-grounded multimedia MP4. A separate structured storyboard expands the validated
+  material into a compact 4-to-15-minute mini-lecture with explanations, examples, misconceptions,
+  and a recap.
 - Local development keeps the `background` backend so developers do not need AWS services.
 - Retrieval currently chunks up to 250 tenant documents, ranks excerpts with TF-IDF (with a lexical
   fallback), limits per-document dominance, and sends bounded source-labelled context.

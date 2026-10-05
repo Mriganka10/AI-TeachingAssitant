@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Professor AI Workspace</title>
-  <link rel="stylesheet" href="/static/styles.css?v=20260921-progressive-jobs">
+  <link rel="stylesheet" href="/static/styles.css?v=20260926-multimedia-video-v3">
 </head>
 <body>
   <section id="login" class="auth-shell">
@@ -179,7 +179,7 @@
             <h4>AI Teaching Assistant</h4>
             <p>Build a complete, evidence-aware teaching package from one topic and your own materials.</p>
             <div class="capability-list">
-              <span>Lecture decks</span><span>Notes</span><span>MCQs</span><span>Assignments</span><span>Bloom mapping</span><span>Viva</span>
+              <span>Lecture decks</span><span>Notes</span><span>Explainer videos</span><span>MCQs</span><span>Assignments</span><span>Bloom mapping</span><span>Viva</span>
             </div>
             <button class="agent-launch" data-agent-target="teaching"><span>Start preparing a lecture</span><span>→</span></button>
           </article>
@@ -259,6 +259,7 @@
               <textarea id="teach-instructions" placeholder="Learning priorities, required examples, assessment style, exclusions, or institutional requirements"></textarea>
             </label>
             <label class="check full-field"><input id="teach-web" type="checkbox" checked><span><strong>Use current web research</strong><small>Include recent industry news and credible public sources.</small></span></label>
+            <label class="check full-field"><input id="teach-video" type="checkbox"><span><strong>Generate multimedia explainer video</strong><small>Create a 4–15 minute visual overview with narrated concept maps, comparisons, processes, worked examples, formulas, applications, and a recap. The video is grounded in the generated teaching package.</small></span></label>
             <button class="primary-button submit-agent full-field">Generate teaching package <span>→</span></button>
           </form>
 
@@ -298,6 +299,6 @@
       </main>
     </div>
   </section>
-  <script src="/static/app.js?v=20260921-progressive-jobs"></script>
+  <script src="/static/app.js?v=20260926-multimedia-video-v3"></script>
 </body>
 </html>

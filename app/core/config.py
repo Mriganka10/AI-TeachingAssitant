@@ -1,7 +1,8 @@
+import re
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -25,6 +26,21 @@ class Settings(BaseSettings):
     openai_prompt_cache_retention: str | None = None
     llm_repair_attempts: int = 1
     llm_service_mode: str = "openai"
+    video_generation_enabled: bool = True
+    video_min_minutes: int = 4
+    video_max_minutes: int = 15
+    video_script_model: str | None = None
+    video_script_max_output_tokens: int = 14_000
+    video_tts_provider: str = "openai"
+    video_tts_model: str = "gpt-4o-mini-tts"
+    video_tts_voice: str = "marin"
+    video_tts_speed: float = 0.95
+    elevenlabs_api_key: str | None = None
+    elevenlabs_model_id: str = "eleven_multilingual_v2"
+    elevenlabs_voice_id: str = "JBFqnCBsd6RMkjVDRZzb"
+    elevenlabs_output_format: str = "mp3_44100_128"
+    elevenlabs_stability: float = 0.55
+    elevenlabs_similarity_boost: float = 0.78
 
     auth_enabled: bool = True
     otp_dev_mode: bool = True
@@ -70,6 +86,51 @@ class Settings(BaseSettings):
         if value.startswith("postgresql://") and "+psycopg" not in value:
             return "postgresql+psycopg://" + value.removeprefix("postgresql://")
         return value
+
+    @field_validator("video_min_minutes", "video_max_minutes")
+    @classmethod
+    def validate_video_minutes(cls, value: int) -> int:
+        if not 4 <= value <= 15:
+            raise ValueError("Video duration limits must be between 4 and 15 minutes.")
+        return value
+
+    @field_validator("video_tts_speed")
+    @classmethod
+    def validate_video_tts_speed(cls, value: float) -> float:
+        if not 0.75 <= value <= 1.20:
+            raise ValueError("VIDEO_TTS_SPEED must be between 0.75 and 1.20.")
+        return value
+
+    @field_validator("video_tts_provider")
+    @classmethod
+    def validate_video_tts_provider(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"openai", "elevenlabs"}:
+            raise ValueError("VIDEO_TTS_PROVIDER must be 'openai' or 'elevenlabs'.")
+        return normalized
+
+    @field_validator("elevenlabs_stability", "elevenlabs_similarity_boost")
+    @classmethod
+    def validate_elevenlabs_voice_setting(cls, value: float) -> float:
+        if not 0.0 <= value <= 1.0:
+            raise ValueError("ElevenLabs voice settings must be between 0 and 1.")
+        return value
+
+    @field_validator("elevenlabs_output_format")
+    @classmethod
+    def validate_elevenlabs_output_format(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if not re.fullmatch(r"mp3_\d+_\d+", normalized):
+            raise ValueError(
+                "ELEVENLABS_OUTPUT_FORMAT must be an MP3 format such as mp3_44100_128."
+            )
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_video_duration_range(self):
+        if self.video_min_minutes > self.video_max_minutes:
+            raise ValueError("VIDEO_MIN_MINUTES cannot exceed VIDEO_MAX_MINUTES.")
+        return self
 
     @property
     def is_production(self) -> bool:
