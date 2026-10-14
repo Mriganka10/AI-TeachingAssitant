@@ -7,6 +7,7 @@ import re
 import subprocess
 import sys
 import textwrap
+import unicodedata
 import urllib.error
 import urllib.request
 import wave
@@ -19,11 +20,12 @@ from tempfile import TemporaryDirectory
 from typing import Any
 
 from app.core.config import settings
+from app.core.openai_client import create_openai_client
 
 FRAME_WIDTH = 1280
 FRAME_HEIGHT = 720
 WORDS_PER_MINUTE = 138
-SCRIPT_WORDS_PER_MINUTE = 190
+SCRIPT_WORDS_PER_MINUTE = WORDS_PER_MINUTE
 MAX_TTS_CHARACTERS = 3900
 MINIMUM_AUDIO_COVERAGE = 0.80
 MAX_AUDIO_TEMPO = 1.15
@@ -45,11 +47,10 @@ VIDEO_PLAN_SCHEMA = {
     "type": "object",
     "properties": {
         "title": {"type": "string"},
-        "target_duration_seconds": {"type": "integer", "minimum": 240, "maximum": 900},
+        "target_duration_seconds": {"type": "integer", "minimum": 60},
         "scenes": {
             "type": "array",
-            "minItems": 8,
-            "maxItems": 24,
+            "minItems": 3,
             "items": {
                 "type": "object",
                 "properties": {
@@ -100,7 +101,13 @@ class VideoScene:
     takeaway: str = ""
 
 
-def create_teaching_video(result: dict, path: Path) -> Path:
+def create_teaching_video(
+    result: dict,
+    path: Path,
+    *,
+    min_minutes: int | None = None,
+    max_minutes: int | None = None,
+) -> Path:
     """Render a verified 16:9 explainer that stays within the configured duration range."""
     if not settings.video_generation_enabled:
         raise RuntimeError("Video generation is disabled by VIDEO_GENERATION_ENABLED.")
@@ -114,18 +121,23 @@ def create_teaching_video(result: dict, path: Path) -> Path:
     if settings.video_tts_provider == "elevenlabs" and not settings.elevenlabs_api_key:
         raise RuntimeError("ELEVENLABS_API_KEY is required when VIDEO_TTS_PROVIDER=elevenlabs.")
 
+    minimum_minutes, maximum_minutes = _resolve_video_duration_range(
+        min_minutes=min_minutes,
+        max_minutes=max_minutes,
+    )
+
     scenes = generate_teaching_video_plan(
         result,
-        min_minutes=settings.video_min_minutes,
-        max_minutes=settings.video_max_minutes,
+        min_minutes=minimum_minutes,
+        max_minutes=maximum_minutes,
     )
     if not scenes:
         raise RuntimeError("The teaching package does not contain enough content for a video.")
 
     path.parent.mkdir(parents=True, exist_ok=True)
     ffmpeg = _ffmpeg_executable()
-    minimum_seconds = min(15, max(4, settings.video_min_minutes)) * 60
-    maximum_seconds = min(15, max(1, settings.video_max_minutes)) * 60
+    minimum_seconds = minimum_minutes * 60
+    maximum_seconds = maximum_minutes * 60
 
     with TemporaryDirectory(prefix="professor-video-", dir=path.parent) as workspace_name:
         workspace = Path(workspace_name)
@@ -169,8 +181,8 @@ def create_teaching_video(result: dict, path: Path) -> Path:
         tempo = max(1.0, (narration_seconds + normal_pause_total) / maximum_seconds)
         if tempo > MAX_AUDIO_TEMPO:
             raise RuntimeError(
-                "The narration exceeds the 15-minute video limit even with a modest pace "
-                "adjustment. Regenerate a shorter storyboard."
+                "The narration exceeds the selected maximum video duration even with a modest "
+                "pace adjustment. Regenerate a shorter storyboard or increase the maximum."
             )
         playback_seconds = narration_seconds / tempo
         required_pause_total = max(0.0, minimum_seconds - playback_seconds)
@@ -211,6 +223,19 @@ def create_teaching_video(result: dict, path: Path) -> Path:
     return path
 
 
+def _resolve_video_duration_range(
+    *, min_minutes: int | None, max_minutes: int | None
+) -> tuple[int, int]:
+    """Resolve request-level duration controls without changing deployment defaults."""
+    minimum = settings.video_min_minutes if min_minutes is None else min_minutes
+    maximum = settings.video_max_minutes if max_minutes is None else max_minutes
+    if minimum < 1 or maximum < 1:
+        raise ValueError("Video duration limits must be positive whole minutes.")
+    if minimum > maximum:
+        raise ValueError("Minimum video duration cannot exceed maximum video duration.")
+    return minimum, maximum
+
+
 def generate_teaching_video_plan(
     result: dict, *, min_minutes: int = 4, max_minutes: int = 15
 ) -> list[VideoScene]:
@@ -218,17 +243,16 @@ def generate_teaching_video_plan(
     if not settings.openai_api_key:
         raise RuntimeError("OPENAI_API_KEY is required to prepare the teaching-video script.")
 
-    minimum = min(15, max(4, min_minutes))
-    maximum = min(15, max(minimum, max_minutes))
+    minimum = max(1, min_minutes)
+    maximum = max(minimum, max_minutes)
     source_word_count = len(_text(result).split())
     target_minutes = min(maximum, max(minimum, round(2 + source_word_count / 500)))
-    minimum_words = minimum * SCRIPT_WORDS_PER_MINUTE
+    minimum_words = max(75, round(minimum * SCRIPT_WORDS_PER_MINUTE * 0.95))
     target_words = target_minutes * SCRIPT_WORDS_PER_MINUTE
-    maximum_words = min(maximum * SCRIPT_WORDS_PER_MINUTE, 2200)
+    maximum_words = max(minimum_words, round(maximum * SCRIPT_WORDS_PER_MINUTE * 1.05))
+    suggested_scene_count = max(3, round(target_words / 110))
 
-    from openai import OpenAI
-
-    client = OpenAI(api_key=settings.openai_api_key)
+    client = create_openai_client(api_key=settings.openai_api_key)
     request_payload: dict[str, Any] = {
         "teaching_package": result,
         "video_requirements": {
@@ -238,6 +262,7 @@ def generate_teaching_video_plan(
             "minimum_narration_words": minimum_words,
             "target_narration_words": target_words,
             "maximum_narration_words": maximum_words,
+            "suggested_scene_count": suggested_scene_count,
         },
     }
     last_issues: list[str] = []
@@ -256,7 +281,10 @@ def generate_teaching_video_plan(
             model=settings.video_script_model or settings.openai_model,
             instructions=_video_script_instructions(),
             input=json.dumps(request_payload, ensure_ascii=False),
-            max_output_tokens=settings.video_script_max_output_tokens,
+            max_output_tokens=max(
+                settings.video_script_max_output_tokens,
+                round(maximum_words * 2.4),
+            ),
             store=False,
             text={
                 "verbosity": "high",
@@ -389,8 +417,10 @@ Each scene needs two to five short on-screen bullets, a one-sentence takeaway, a
 narration. Narration must contain complete explanations with transitions between ideas; never use
 filler, slogans, repeated sentences, or classroom-management instructions as a substitute for
 teaching. Speak mathematical notation in an understandable way. Respect the requested narration
-word range because it controls the final duration. The first scene must disclose that the narration
-is AI-generated.
+word range because it controls the final duration. Use the supplied suggested_scene_count as the
+target storyboard length and normally keep each scene between 25 and 180 narration words so short
+and long user-selected videos both progress through visible scene changes. The first scene must
+disclose that the narration is AI-generated.
 """
 
 
@@ -399,8 +429,8 @@ def _video_plan_issues(plan: Any, *, minimum_words: int, maximum_words: int) -> 
     if not isinstance(plan, dict):
         return ["The plan must be a JSON object."]
     scenes = plan.get("scenes")
-    if not isinstance(scenes, list) or not 8 <= len(scenes) <= 24:
-        issues.append("The plan must contain between 8 and 24 scenes.")
+    if not isinstance(scenes, list) or len(scenes) < 3:
+        issues.append("The plan must contain at least three scenes.")
         return issues
     narration_words = 0
     visual_types: set[str] = set()
@@ -414,7 +444,7 @@ def _video_plan_issues(plan: Any, *, minimum_words: int, maximum_words: int) -> 
         narration_words += len(narration.split())
         if len(narration) > MAX_TTS_CHARACTERS:
             issues.append(f"Scene {index} narration exceeds the speech-input limit.")
-        if len(narration.split()) < 45:
+        if len(narration.split()) < 25:
             issues.append(f"Scene {index} needs a fuller explanation.")
         if not 2 <= len(scene.get("bullets") or []) <= 5:
             issues.append(f"Scene {index} must contain two to five visual bullets.")
@@ -563,7 +593,7 @@ def estimated_video_seconds(scenes: list[VideoScene]) -> float:
 
 def _apply_narration_budget(scenes: list[VideoScene], *, max_minutes: int) -> list[VideoScene]:
     # Keep a safety margin because natural pauses can make generated speech slower than word count.
-    word_budget = max(120, int(min(15, max(1, max_minutes)) * WORDS_PER_MINUTE * 0.82))
+    word_budget = max(120, int(max(1, max_minutes) * WORDS_PER_MINUTE * 0.82))
     remaining = word_budget
     bounded: list[VideoScene] = []
     for scene in scenes:
@@ -585,9 +615,7 @@ def _create_narration(text: str, path: Path) -> None:
         _create_elevenlabs_narration(text, path)
         return
 
-    from openai import OpenAI
-
-    client = OpenAI(api_key=settings.openai_api_key)
+    client = create_openai_client(api_key=settings.openai_api_key)
     with client.audio.speech.with_streaming_response.create(
         model=settings.video_tts_model,
         voice=settings.video_tts_voice,
@@ -719,7 +747,7 @@ def _draw_wrapped(
     x1, y1, x2, _ = box
     font = _font(size, bold=bold)
     average = max(8, int((x2 - x1) / max(8, size * 0.56)))
-    lines = textwrap.wrap(_text(text), width=average)[:max_lines]
+    lines = textwrap.wrap(_display_text(text), width=average)[:max_lines]
     y = y1
     for line in lines:
         draw.text((x1, y), line, font=font, fill=color)
@@ -841,28 +869,23 @@ def _draw_sequence_visual(draw, scene: VideoScene) -> None:
 def _draw_concept_map_visual(draw, scene: VideoScene) -> None:
     title_bottom = _draw_scene_title(draw, scene)
     center = (640, title_bottom + 190)
-    draw.ellipse((520, center[1] - 64, 760, center[1] + 64), fill="#2B6DE8")
-    _draw_wrapped(
-        draw,
-        scene.title,
-        (548, center[1] - 32, 735, center[1] + 40),
-        size=18,
-        color="#FFFFFF",
-        bold=True,
-        max_lines=2,
-    )
     positions = [
         (105, title_bottom + 55),
         (865, title_bottom + 55),
         (105, title_bottom + 275),
         (865, title_bottom + 275),
     ]
-    for item, (x, y) in zip(
-        list(scene.visual_elements or scene.bullets)[:4], positions, strict=False
-    ):
-        target_x = x + 130
-        target_y = y + 58
-        draw.line((center[0], center[1], target_x, target_y), fill="#9DB9E8", width=4)
+    items_and_positions = list(
+        zip(list(scene.visual_elements or scene.bullets)[:4], positions, strict=False)
+    )
+
+    # Connect only the shape boundaries. Drawing centre-to-centre lines made the
+    # connectors cut through both the central label and the surrounding cards.
+    for _, (x, y) in items_and_positions:
+        start, end = _concept_connector_points(center, (120, 64), (x, y, x + 260, y + 116))
+        draw.line((*start, *end), fill="#9DB9E8", width=4)
+
+    for item, (x, y) in items_and_positions:
         draw.rounded_rectangle(
             (x, y, x + 260, y + 116), radius=18, fill="#EEF4FF", outline="#B9CFF5", width=2
         )
@@ -875,6 +898,95 @@ def _draw_concept_map_visual(draw, scene: VideoScene) -> None:
             bold=True,
             max_lines=3,
         )
+
+    draw.ellipse((520, center[1] - 64, 760, center[1] + 64), fill="#2B6DE8")
+    _draw_centered_wrapped(
+        draw,
+        scene.title,
+        (542, center[1] - 47, 738, center[1] + 47),
+        size=16,
+        color="#FFFFFF",
+        bold=True,
+        max_lines=3,
+        spacing=4,
+    )
+
+
+def _concept_connector_points(
+    center: tuple[int, int],
+    radii: tuple[int, int],
+    card: tuple[int, int, int, int],
+) -> tuple[tuple[int, int], tuple[int, int]]:
+    """Return connector endpoints on an ellipse and rectangular card boundary."""
+    import math
+
+    center_x, center_y = center
+    radius_x, radius_y = radii
+    left, top, right, bottom = card
+    target_x = (left + right) / 2
+    target_y = (top + bottom) / 2
+    delta_x = target_x - center_x
+    delta_y = target_y - center_y
+
+    ellipse_scale = 1 / math.sqrt(
+        (delta_x / max(1, radius_x)) ** 2 + (delta_y / max(1, radius_y)) ** 2
+    )
+    start = (
+        round(center_x + delta_x * ellipse_scale),
+        round(center_y + delta_y * ellipse_scale),
+    )
+
+    half_width = max(1.0, (right - left) / 2)
+    half_height = max(1.0, (bottom - top) / 2)
+    card_scale = 1 / max(abs(delta_x) / half_width, abs(delta_y) / half_height)
+    end = (
+        round(target_x - delta_x * card_scale),
+        round(target_y - delta_y * card_scale),
+    )
+    return start, end
+
+
+def _draw_centered_wrapped(
+    draw,
+    text: str,
+    box: tuple[int, int, int, int],
+    *,
+    size: int,
+    color: str,
+    bold: bool = False,
+    max_lines: int = 3,
+    spacing: int = 4,
+) -> None:
+    """Fit and centre a short label without clipping it inside a diagram node."""
+    x1, y1, x2, y2 = box
+    font = _font(size, bold=bold)
+    words = _display_text(text).split()
+    lines: list[str] = []
+    while words and len(lines) < max_lines:
+        line_words: list[str] = []
+        while words:
+            candidate = " ".join((*line_words, words[0]))
+            bounds = draw.textbbox((0, 0), candidate, font=font)
+            if line_words and bounds[2] - bounds[0] > x2 - x1:
+                break
+            line_words.append(words.pop(0))
+        lines.append(" ".join(line_words))
+    if words and lines:
+        suffix = "…"
+        while lines[-1]:
+            bounds = draw.textbbox((0, 0), lines[-1] + suffix, font=font)
+            if bounds[2] - bounds[0] <= x2 - x1:
+                break
+            lines[-1] = lines[-1].rsplit(" ", 1)[0] if " " in lines[-1] else lines[-1][:-1]
+        lines[-1] += suffix
+
+    line_height = size + spacing
+    y = y1 + max(0, ((y2 - y1) - len(lines) * line_height + spacing) // 2)
+    for line in lines:
+        bounds = draw.textbbox((0, 0), line, font=font)
+        width = bounds[2] - bounds[0]
+        draw.text((x1 + ((x2 - x1) - width) / 2, y), line, font=font, fill=color)
+        y += line_height
 
 
 def _draw_example_visual(draw, scene: VideoScene) -> None:
@@ -909,14 +1021,12 @@ def _draw_formula_visual(draw, scene: VideoScene) -> None:
     draw.rounded_rectangle(
         (110, title_bottom + 32, 1170, title_bottom + 172), radius=24, fill="#10233F"
     )
-    _draw_wrapped(
+    _draw_math_formula(
         draw,
         formula,
         (150, title_bottom + 72, 1130, title_bottom + 150),
         size=34,
         color="#FFFFFF",
-        bold=True,
-        max_lines=2,
     )
     y = title_bottom + 220
     for item in elements[1:5] or list(scene.bullets)[:4]:
@@ -925,6 +1035,124 @@ def _draw_formula_visual(draw, scene: VideoScene) -> None:
             _draw_wrapped(draw, item, (158, y, 1130, y + 62), size=21, color="#253247", max_lines=2)
             + 10
         )
+
+
+_SUBSCRIPT_CHARACTERS = str.maketrans(
+    {
+        "₀": "_0", "₁": "_1", "₂": "_2", "₃": "_3", "₄": "_4",
+        "₅": "_5", "₆": "_6", "₇": "_7", "₈": "_8", "₉": "_9",
+        "ₐ": "_a", "ₑ": "_e", "ₕ": "_h", "ᵢ": "_i", "ⱼ": "_j",
+        "ₖ": "_k", "ₗ": "_l", "ₘ": "_m", "ₙ": "_n", "ₒ": "_o",
+        "ₚ": "_p", "ᵣ": "_r", "ₛ": "_s", "ₜ": "_t", "ₓ": "_x",
+        "⁰": "^0", "¹": "^1", "²": "^2", "³": "^3", "⁴": "^4",
+        "⁵": "^5", "⁶": "^6", "⁷": "^7", "⁸": "^8", "⁹": "^9",
+        "ⁱ": "^i", "ⁿ": "^n", "⁺": "+", "⁻": "-", "₊": "+", "₋": "-",
+    }
+)
+
+
+def _display_text(value: Any) -> str:
+    """Return portable on-screen text for fonts available on Windows and Linux.
+
+    Mathematical sub/superscript glyphs and styled Unicode letters are common
+    in model output, but Arial and some server fonts render them as empty boxes.
+    The ASCII notation remains mathematically readable in every generated frame.
+    """
+    text = _text(value).translate(_SUBSCRIPT_CHARACTERS)
+    text = unicodedata.normalize("NFKC", text)
+    latex_replacements = {
+        r"\times": "×",
+        r"\cdot": "·",
+        r"\sum": "Σ",
+        r"\sqrt": "√",
+        r"\leq": "≤",
+        r"\geq": "≥",
+        r"\neq": "≠",
+        r"\approx": "≈",
+    }
+    for source, replacement in latex_replacements.items():
+        text = text.replace(source, replacement)
+    text = re.sub(r"\\(?:mathrm|mathbf|text)\{([^{}]+)\}", r"\1", text)
+    return text
+
+
+def _math_tokens(value: Any) -> list[tuple[str, str]]:
+    """Split portable formula text into normal, subscript, and superscript runs."""
+    text = _display_text(value)
+    tokens: list[tuple[str, str]] = []
+    normal: list[str] = []
+
+    def flush_normal() -> None:
+        if normal:
+            tokens.append(("".join(normal), "normal"))
+            normal.clear()
+
+    index = 0
+    while index < len(text):
+        marker = text[index]
+        if marker not in {"_", "^"} or index + 1 >= len(text):
+            normal.append(marker)
+            index += 1
+            continue
+        flush_normal()
+        level = "subscript" if marker == "_" else "superscript"
+        index += 1
+        if text[index] == "{":
+            end = text.find("}", index + 1)
+            if end != -1:
+                tokens.append((text[index + 1 : end], level))
+                index = end + 1
+                continue
+        match = re.match(r"[A-Za-z0-9]+", text[index:])
+        if match:
+            tokens.append((match.group(0), level))
+            index += len(match.group(0))
+        else:
+            tokens.append((text[index], level))
+            index += 1
+    flush_normal()
+    return tokens
+
+
+def _draw_math_formula(
+    draw,
+    formula: Any,
+    box: tuple[int, int, int, int],
+    *,
+    size: int,
+    color: str,
+) -> None:
+    """Draw readable inline mathematics with real baseline offsets and no missing glyphs."""
+    x1, y1, x2, y2 = box
+    tokens = _math_tokens(formula)
+    selected_size = size
+    while selected_size > 22:
+        main_font = _font(selected_size, bold=True)
+        small_font = _font(max(14, round(selected_size * 0.68)), bold=True)
+        width = sum(
+            draw.textlength(text, font=main_font if level == "normal" else small_font)
+            for text, level in tokens
+        )
+        if width <= x2 - x1:
+            break
+        selected_size -= 2
+    main_font = _font(selected_size, bold=True)
+    small_font = _font(max(14, round(selected_size * 0.68)), bold=True)
+    width = sum(
+        draw.textlength(text, font=main_font if level == "normal" else small_font)
+        for text, level in tokens
+    )
+    x = x1 + max(0, ((x2 - x1) - width) / 2)
+    y = y1 + max(0, ((y2 - y1) - selected_size) / 2) - 4
+    for text, level in tokens:
+        font = main_font if level == "normal" else small_font
+        offset = 0
+        if level == "subscript":
+            offset = round(selected_size * 0.40)
+        elif level == "superscript":
+            offset = -round(selected_size * 0.24)
+        draw.text((x, y + offset), text, font=font, fill=color)
+        x += draw.textlength(text, font=font)
 
 
 def _draw_key_points_visual(draw, scene: VideoScene) -> None:

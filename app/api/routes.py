@@ -322,7 +322,12 @@ def run_agent_job(job_id: str) -> None:
         if video_requested:
             try:
                 base = next(path.stem for path in paths if path.suffix == ".json")
-                video_path = create_teaching_video(result, output_dir / f"{base}-explainer.mp4")
+                video_path = create_teaching_video(
+                    result,
+                    output_dir / f"{base}-explainer.mp4",
+                    min_minutes=payload.get("video_min_minutes"),
+                    max_minutes=payload.get("video_max_minutes"),
+                )
                 _persist_artifact(db, video_path, tenant_id=tenant_id, job_id=job.id)
                 db.commit()
             except Exception as exc:  # noqa: BLE001 - optional video must not fail core artifacts

@@ -90,8 +90,8 @@ class Settings(BaseSettings):
     @field_validator("video_min_minutes", "video_max_minutes")
     @classmethod
     def validate_video_minutes(cls, value: int) -> int:
-        if not 4 <= value <= 15:
-            raise ValueError("Video duration limits must be between 4 and 15 minutes.")
+        if value < 1:
+            raise ValueError("Video duration limits must be positive whole minutes.")
         return value
 
     @field_validator("video_tts_speed")

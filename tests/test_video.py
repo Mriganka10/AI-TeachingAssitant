@@ -9,12 +9,16 @@ from PIL import Image, ImageChops
 from app.artifacts.video import (
     VideoScene,
     _concatenate_segments,
+    _concept_connector_points,
     _constrain_plan_narration,
     _create_elevenlabs_narration,
+    _display_text,
     _ffmpeg_executable,
+    _math_tokens,
     _media_duration,
     _render_scene_frame,
     _render_segment,
+    _resolve_video_duration_range,
     _run_ffmpeg,
     _trim_narration_silence,
     _verify_scene_progression,
@@ -25,6 +29,19 @@ from app.artifacts.video import (
     generate_teaching_video_plan,
 )
 from app.core.config import settings
+
+
+def test_request_video_duration_overrides_defaults(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "video_min_minutes", 4)
+    monkeypatch.setattr(settings, "video_max_minutes", 15)
+
+    assert _resolve_video_duration_range(min_minutes=1, max_minutes=30) == (1, 30)
+    assert _resolve_video_duration_range(min_minutes=None, max_minutes=None) == (4, 15)
+
+    with pytest.raises(ValueError, match="cannot exceed"):
+        _resolve_video_duration_range(min_minutes=11, max_minutes=7)
+    with pytest.raises(ValueError, match="positive"):
+        _resolve_video_duration_range(min_minutes=0, max_minutes=7)
 
 
 def test_video_plan_uses_teaching_content_and_respects_fifteen_minute_budget() -> None:
@@ -249,6 +266,34 @@ def test_multimedia_scene_types_render_different_visual_compositions(tmp_path: P
     assert title_path.read_bytes() != process_path.read_bytes()
     assert title_path.stat().st_size > 10_000
     assert process_path.stat().st_size > 10_000
+
+
+def test_equation_display_text_uses_portable_subscript_and_superscript_notation() -> None:
+    assert _display_text("D = {(xᵢ, yᵢ), …, (xₙ, yₙ)}") == "D = {(x_i, y_i), ..., (x_n, y_n)}"
+    assert _display_text("MSE = Σ(yᵢ - ŷᵢ)² / n") == "MSE = Σ(y_i - ŷ_i)^2 / n"
+    assert _display_text(r"distance = \sqrt{(a₁-b₁)²}") == "distance = √{(a_1-b_1)^2}"
+    assert _math_tokens("xᵢ²") == [
+        ("x", "normal"),
+        ("i", "subscript"),
+        ("2", "superscript"),
+    ]
+
+
+def test_concept_map_connectors_stop_at_shape_boundaries() -> None:
+    center = (640, 340)
+    radii = (120, 64)
+    card = (105, 205, 365, 321)
+
+    start, end = _concept_connector_points(center, radii, card)
+
+    # The connector begins on the central ellipse, not at its centre.
+    ellipse_value = ((start[0] - center[0]) / radii[0]) ** 2 + (
+        (start[1] - center[1]) / radii[1]
+    ) ** 2
+    assert ellipse_value == pytest.approx(1.0, abs=0.03)
+    # It ends on the right or bottom edge of the left-side card, not in its text area.
+    assert end[0] == card[2] or end[1] == card[3]
+    assert start != center
 
 
 def test_multimedia_frame_and_narration_encode_to_playable_mp4(tmp_path: Path) -> None:

@@ -410,8 +410,40 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function syncVideoDurationControls() {
+  const enabled = $("#teach-video").checked;
+  const settingsPanel = $("#video-duration-settings");
+  settingsPanel.classList.toggle("hidden", !enabled);
+  settingsPanel.setAttribute("aria-hidden", String(!enabled));
+  $("#teach-video").setAttribute("aria-expanded", String(enabled));
+  $("#teach-video-min").disabled = !enabled;
+  $("#teach-video-max").disabled = !enabled;
+}
+
+function validateVideoDurationRange() {
+  const minimumInput = $("#teach-video-min");
+  const maximumInput = $("#teach-video-max");
+  const minimum = Number(minimumInput.value);
+  const maximum = Number(maximumInput.value);
+  const invalidRange = minimum > maximum;
+  maximumInput.setCustomValidity(
+    invalidRange ? "Maximum duration must be greater than or equal to minimum duration." : ""
+  );
+  return !invalidRange;
+}
+
+$("#teach-video").addEventListener("change", syncVideoDurationControls);
+$("#teach-video-min").addEventListener("input", validateVideoDurationRange);
+$("#teach-video-max").addEventListener("input", validateVideoDurationRange);
+syncVideoDurationControls();
+
 $("#teaching-form").onsubmit = (event) => {
   event.preventDefault();
+  const videoRequested = $("#teach-video").checked;
+  if (videoRequested && !validateVideoDurationRange()) {
+    $("#teach-video-max").reportValidity();
+    return;
+  }
   run("/api/agents/teaching", {
     topic: $("#teach-topic").value,
     course: $("#teach-course").value || "General",
@@ -420,7 +452,11 @@ $("#teaching-form").onsubmit = (event) => {
     difficulty: $("#teach-difficulty").value,
     instructions: $("#teach-instructions").value.trim(),
     use_web_search: $("#teach-web").checked,
-    generate_video: $("#teach-video").checked,
+    generate_video: videoRequested,
+    ...(videoRequested ? {
+      video_min_minutes: +$("#teach-video-min").value,
+      video_max_minutes: +$("#teach-video-max").value,
+    } : {}),
     collections: ["previous_notes", "books", "case_studies"],
   });
 };
