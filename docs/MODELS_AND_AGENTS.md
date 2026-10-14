@@ -74,8 +74,9 @@ validated. It turns the title, objectives, lecture sections, examples, activitie
 review questions into a coherent 16:9 mini-lecture rather than reading document bullets. The script
 must explain definitions, mechanisms, distinctions, examples, misconceptions, and takeaways and
 must satisfy a narration word-range check. Narration then uses the configured OpenAI Speech model
-and voice. The default duration range is 4–15 minutes; a final encoder limit guarantees that no
-video exceeds 15 minutes. The storyboard must use at least three visual compositions, including
+and voice. The default duration range is 4–15 minutes, and each dashboard request can select any
+positive whole-minute minimum and maximum. The final encoder verifies the requested range. The
+storyboard must use at least three visual compositions, including
 concept maps, comparisons, processes, worked examples, formulas, case studies, or recaps. The UI
 and video both disclose that the narration is AI-generated. Narration can use OpenAI TTS or the
 optional ElevenLabs long-form provider without changing document generation.

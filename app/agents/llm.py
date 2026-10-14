@@ -3,6 +3,7 @@ import re
 
 from app.agents.contracts import output_schema, schema_name, validate_output
 from app.core.config import settings
+from app.core.openai_client import create_openai_client
 
 
 class LLMService:
@@ -16,9 +17,7 @@ class LLMService:
         if not settings.openai_api_key:
             raise RuntimeError("OPENAI_API_KEY is required. Configure it as an environment variable.")
 
-        from openai import OpenAI
-
-        client = OpenAI(api_key=settings.openai_api_key)
+        client = create_openai_client(api_key=settings.openai_api_key)
         result = self._request(
             client,
             agent_type=agent_type,

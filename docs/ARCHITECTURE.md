@@ -22,7 +22,7 @@ Tenant-Scoped Application Services
        +-- Bounded multi-collection retrieval
        +-- OpenAI Responses API + optional web search
        +-- Structured PPTX / DOCX / PDF / JSON generation
-       +-- Optional multimedia teaching-video generation (MP4, 4–15 minutes)
+       +-- Optional multimedia teaching-video generation (MP4, user-selected duration range)
        +-- Local disk or encrypted S3 storage
        +-- Audit-event recording
 ```

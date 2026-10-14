@@ -52,6 +52,7 @@ Inputs:
 - optional additional instructions
 - whether to use current web research
 - whether to generate a multimedia explainer video
+- preferred minimum and maximum video duration as positive whole minutes
 - source collections
 
 Required structured output:
@@ -78,8 +79,10 @@ Generated artifacts:
 - optional 16:9 multimedia MP4 derived from the validated teaching package. A second structured
   storyboard pass turns the package into a coherent mini-lecture with concept maps, comparisons,
   processes, worked examples, formulas, applications, misconceptions, and a recap. Duration is
-  verified at 4–15 minutes, with distinct scene changes, alternating pan/zoom motion, transition
-  fades, a hard 15-minute limit, and an on-screen AI-voice disclosure. The renderer trims long
+  verified against the professor's selected duration range, with distinct scene changes,
+  alternating pan/zoom motion, transition
+  fades and an on-screen AI-voice disclosure. The default is 4–15 minutes, but the professor may
+  request a shorter or longer range. The renderer trims long
   silent TTS tails, checks the speech-bearing duration of each scene, includes every storyboard
   scene, and checks visual changes in the finished MP4 before making it downloadable.
 

@@ -132,8 +132,8 @@ pytest
 - Production agent execution uses SQS and a separate worker service: API calls enqueue work
   quickly, the UI polls job status, and completed teaching jobs expose JSON, DOCX, PDF, PPTX, and
   an optional content-grounded multimedia MP4. A separate structured storyboard expands the validated
-  material into a compact 4-to-15-minute mini-lecture with explanations, examples, misconceptions,
-  and a recap.
+  material into a mini-lecture with explanations, examples, misconceptions, and a recap. The
+  default duration range is 4–15 minutes, and professors can override it per request.
 - Local development keeps the `background` backend so developers do not need AWS services.
 - Retrieval currently chunks up to 250 tenant documents, ranks excerpts with TF-IDF (with a lexical
   fallback), limits per-document dominance, and sends bounded source-labelled context.

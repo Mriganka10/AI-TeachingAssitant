@@ -1,6 +1,8 @@
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from sqlalchemy import select
 
 from app.api import routes
@@ -9,6 +11,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.models import AgentJob, Artifact
 from app.main import app
+from app.schemas import TeachingRequest
 
 
 def login(client: TestClient) -> None:
@@ -220,7 +223,8 @@ def test_artifact_failure_preserves_generated_content(monkeypatch) -> None:
 def test_optional_teaching_video_is_downloadable(monkeypatch) -> None:
     observed = {}
 
-    def create_fake_video(result, path):
+    def create_fake_video(result, path, *, min_minutes, max_minutes):
+        observed["duration_range"] = (min_minutes, max_minutes)
         with SessionLocal() as db:
             job = db.get(AgentJob, path.parent.name)
             observed["status"] = job.status
@@ -243,6 +247,8 @@ def test_optional_teaching_video_is_downloadable(monkeypatch) -> None:
                 "topic": "Video-supported learning",
                 "use_web_search": False,
                 "generate_video": True,
+                "video_min_minutes": 6,
+                "video_max_minutes": 9,
             },
         )
         job = client.get(f"/api/jobs/{response.json()['job_id']}").json()
@@ -252,6 +258,7 @@ def test_optional_teaching_video_is_downloadable(monkeypatch) -> None:
     assert observed == {
         "status": "documents_ready",
         "artifact_types": {"json", "docx", "pdf", "pptx"},
+        "duration_range": (6, 9),
     }
     assert {artifact["type"] for artifact in job["artifacts"]} == {
         "json",
@@ -263,7 +270,7 @@ def test_optional_teaching_video_is_downloadable(monkeypatch) -> None:
 
 
 def test_video_failure_does_not_remove_existing_document_formats(monkeypatch) -> None:
-    def fail_video(result, path):
+    def fail_video(result, path, **_duration):
         raise RuntimeError("simulated narration failure")
 
     monkeypatch.setattr(routes, "create_teaching_video", fail_video)
@@ -301,7 +308,27 @@ def test_frontend_handles_non_json_api_responses() -> None:
     assert 'job.status === "content_ready"' in script
     assert 'job.status === "documents_ready"' in script
     assert "generate_video" in script
+    assert "video_min_minutes" in script
+    assert "video_max_minutes" in script
     assert "maxAttempts" not in script
+
+
+def test_teaching_video_duration_range_is_validated() -> None:
+    with pytest.raises(ValidationError, match="cannot exceed"):
+        TeachingRequest(
+            topic="Invalid duration range",
+            generate_video=True,
+            video_min_minutes=12,
+            video_max_minutes=6,
+        )
+
+    request = TeachingRequest(
+        topic="Long user-selected video",
+        generate_video=True,
+        video_min_minutes=20,
+        video_max_minutes=30,
+    )
+    assert (request.video_min_minutes, request.video_max_minutes) == (20, 30)
 
 
 def test_sqs_backend_enqueues_existing_job_without_running_inline(monkeypatch) -> None:
