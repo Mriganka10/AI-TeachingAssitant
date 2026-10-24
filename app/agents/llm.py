@@ -188,7 +188,7 @@ class LLMService:
                 "exclusion_boundaries": ["Claims without supporting source material"],
             },
             "executive_summary": {
-                "evidence": "The supplied mock corpus indicates variation across contexts.",
+                "evidence": f"The mock corpus for {topic} indicates variation across contexts.",
                 "inference": "Context may influence the observed outcomes.",
                 "limitations": "Mock mode does not contain publishable evidence.",
             },

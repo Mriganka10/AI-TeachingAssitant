@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.agents.relevance import topic_relevance_issues
+
 
 def _string(*, enum: list[str] | None = None) -> dict:
     schema: dict[str, Any] = {"type": "string"}
@@ -325,6 +327,7 @@ def validate_output(agent_type: str, result: dict, request: dict) -> list[str]:
     unknown = sorted(ref for ref in referenced_ids if ref and ref not in source_ids)
     if unknown:
         issues.append("Unknown source references: " + ", ".join(unknown))
+    issues.extend(topic_relevance_issues(agent_type, result, request))
     return issues
 
 

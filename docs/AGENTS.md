@@ -146,8 +146,13 @@ Both agents use:
 1. `AgentJob` for lifecycle tracking.
 2. Tenant-scoped retrieval from uploaded documents.
 3. `LLMService` for OpenAI or mock generation.
+   Before export, semantic validation checks that the title and substantive sections retain
+   the professor's requested topic. A drifted model response receives the configured repair
+   attempt and remains a failed job if it still does not match.
 4. A `content_ready` checkpoint that exposes validated JSON before export work completes.
 5. `create_artifacts` for established document export, plus optional teaching-video rendering.
+   The optional video storyboard is also checked against the validated teaching title and lesson
+   sections before narration begins.
 6. `StorageService` for local/S3 persistence.
 7. `AuditEvent` for success and failure traceability.
 8. SQS-backed ECS workers in production, with FastAPI background tasks only for local development.

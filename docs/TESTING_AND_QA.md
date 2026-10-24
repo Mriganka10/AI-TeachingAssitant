@@ -85,6 +85,8 @@ Never put the API key in test fixtures or screenshots.
 - [ ] Tests pass.
 - [ ] Local UI flow passes.
 - [ ] Live OpenAI smoke test passes.
+- [ ] PDF and PPTX text stays on the requested topic for both assistants; video scene titles,
+      visuals, and narration follow the validated teaching package.
 - [ ] Documentation commands match the repository.
 - [ ] No secrets are staged.
 - [ ] Deployment variables are documented.

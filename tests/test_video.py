@@ -125,6 +125,37 @@ def test_video_plan_rejects_brief_bullet_only_narration() -> None:
     assert any("at least 760 words" in issue for issue in issues)
 
 
+def test_video_plan_rejects_unrelated_scenes_even_with_valid_duration() -> None:
+    narration = " ".join(["Coastal tides move sand along a beach."] * 8)
+    plan = {
+        "title": "Time Value of Money",
+        "scenes": [
+            {
+                "section": "COASTAL GEOGRAPHY",
+                "title": "Coastal erosion",
+                "visual_type": "title" if index == 0 else "recap" if index == 3 else "process",
+                "visual_elements": ["Waves", "Sand"],
+                "bullets": ["Tides", "Beaches"],
+                "takeaway": "The coastline changes.",
+                "narration": narration,
+            }
+            for index in range(4)
+        ],
+    }
+    package = {
+        "title": "Time Value of Money",
+        "lecture_sections": [{"title": "Present Value and Discounting"}],
+    }
+
+    issues = _video_plan_issues(
+        plan,
+        minimum_words=100,
+        maximum_words=500,
+        teaching_package=package,
+    )
+    assert any("video scenes drift" in issue for issue in issues)
+
+
 def test_video_plan_safely_constrains_small_narration_overflow() -> None:
     sentence = "The lecturer defines the concept, explains the mechanism, and applies it carefully."
     plan = {
@@ -161,7 +192,7 @@ def test_mock_mode_does_not_create_a_silent_placeholder_video(tmp_path: Path, mo
 
 def test_video_script_uses_strict_schema_and_meets_long_form_budget(monkeypatch) -> None:
     narration = " ".join(
-        ["This explanation defines the idea, connects it to the mechanism, and applies it."] * 10
+        ["Supervised learning uses labels; unsupervised learning finds patterns without labels."] * 10
     )
     plan = {
         "title": "Supervised and Unsupervised Learning",
