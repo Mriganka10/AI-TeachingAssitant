@@ -6,6 +6,7 @@ from pptx import Presentation
 from pptx.util import Inches
 from pypdf import PdfReader
 
+from app.agents.llm import LLMService
 from app.artifacts.generator import create_artifacts
 
 
@@ -132,6 +133,33 @@ def test_research_artifacts_are_all_professor_formats(tmp_path: Path) -> None:
 
     assert {path.suffix for path in paths} == {".json", ".docx", ".pdf", ".pptx"}
     assert all(path.exists() and path.stat().st_size > 0 for path in paths)
+
+
+def test_pdf_and_pptx_keep_the_requested_subject_in_both_agent_workflows(
+    tmp_path: Path,
+) -> None:
+    for agent_type, request, topic in (
+        ("teaching", {"topic": "Time Value of Money", "duration_minutes": 60}, "Time Value of Money"),
+        ("research", {"research_topic": "Responsible AI in Education"}, "Responsible AI in Education"),
+    ):
+        result = LLMService._mock(request)
+        paths = create_artifacts(
+            result,
+            agent_type=agent_type,
+            output_dir=tmp_path / agent_type,
+        )
+        pdf = PdfReader(next(path for path in paths if path.suffix == ".pdf"))
+        pdf_text = " ".join(page.extract_text() or "" for page in pdf.pages)
+        deck = Presentation(next(path for path in paths if path.suffix == ".pptx"))
+        slide_text = " ".join(
+            shape.text
+            for slide in deck.slides
+            for shape in slide.shapes
+            if hasattr(shape, "text")
+        )
+
+        assert topic.casefold() in pdf_text.casefold()
+        assert topic.casefold() in slide_text.casefold()
 
 
 def test_exporters_preserve_math_and_normalize_mcq_labels(tmp_path: Path) -> None:

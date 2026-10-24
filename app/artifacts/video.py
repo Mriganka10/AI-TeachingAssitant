@@ -19,6 +19,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
+from app.agents.relevance import storyboard_relevance_issues
 from app.core.config import settings
 from app.core.openai_client import create_openai_client
 
@@ -314,6 +315,7 @@ def generate_teaching_video_plan(
             plan,
             minimum_words=minimum_words,
             maximum_words=maximum_words,
+            teaching_package=result,
         )
         if not last_issues:
             return [
@@ -424,7 +426,13 @@ disclose that the narration is AI-generated.
 """
 
 
-def _video_plan_issues(plan: Any, *, minimum_words: int, maximum_words: int) -> list[str]:
+def _video_plan_issues(
+    plan: Any,
+    *,
+    minimum_words: int,
+    maximum_words: int,
+    teaching_package: dict | None = None,
+) -> list[str]:
     issues: list[str] = []
     if not isinstance(plan, dict):
         return ["The plan must be a JSON object."]
@@ -468,6 +476,8 @@ def _video_plan_issues(plan: Any, *, minimum_words: int, maximum_words: int) -> 
         issues.append(
             f"Narration has {narration_words} words; it must not exceed {maximum_words} words."
         )
+    if teaching_package is not None:
+        issues.extend(storyboard_relevance_issues(plan, teaching_package))
     return issues
 
 
