@@ -246,7 +246,8 @@ def generate_teaching_video_plan(
 
     minimum = max(1, min_minutes)
     maximum = max(minimum, max_minutes)
-    source_word_count = len(_text(result).split())
+    audience_package = _audience_video_package(result)
+    source_word_count = len(_text(audience_package).split())
     target_minutes = min(maximum, max(minimum, round(2 + source_word_count / 500)))
     minimum_words = max(75, round(minimum * SCRIPT_WORDS_PER_MINUTE * 0.95))
     target_words = target_minutes * SCRIPT_WORDS_PER_MINUTE
@@ -255,7 +256,7 @@ def generate_teaching_video_plan(
 
     client = create_openai_client(api_key=settings.openai_api_key)
     request_payload: dict[str, Any] = {
-        "teaching_package": result,
+        "teaching_package": audience_package,
         "video_requirements": {
             "minimum_minutes": minimum,
             "target_minutes": target_minutes,
@@ -315,7 +316,7 @@ def generate_teaching_video_plan(
             plan,
             minimum_words=minimum_words,
             maximum_words=maximum_words,
-            teaching_package=result,
+            teaching_package=audience_package,
         )
         if not last_issues:
             return [
@@ -331,6 +332,41 @@ def generate_teaching_video_plan(
                 for scene in plan["scenes"]
             ]
     raise RuntimeError("The teaching-video script failed quality checks: " + " ".join(last_issues))
+
+
+def _audience_video_package(result: dict) -> dict:
+    """Provide the planner with learner-facing material, not private facilitation notes."""
+    overview = result.get("overview") if isinstance(result.get("overview"), dict) else {}
+    sections = []
+    for section in result.get("lecture_sections") or []:
+        if not isinstance(section, dict):
+            continue
+        content = section.get("content") if isinstance(section.get("content"), dict) else {}
+        sections.append({
+            "title": section.get("title"),
+            "content": {key: content[key] for key in (
+                "explanation", "key_points", "worked_example", "worked_examples",
+                "common_errors", "concept_check", "source_refs",
+            ) if key in content},
+        })
+    case_study = result.get("case_study")
+    if isinstance(case_study, dict):
+        case_study = {key: case_study[key] for key in (
+            "title", "scenario", "questions", "source_refs",
+        ) if key in case_study}
+    return {
+        "title": result.get("title"),
+        "overview": {key: overview[key] for key in (
+            "course", "audience", "difficulty", "lesson_purpose",
+            "prerequisite_knowledge", "core_formulas", "evidence_base",
+        ) if key in overview},
+        "learning_objectives": result.get("learning_objectives", []),
+        "lecture_sections": sections,
+        "case_study": case_study or {},
+        "numerical_problems": result.get("numerical_problems", []),
+        "discussion_questions": result.get("discussion_questions", []),
+        "sources": result.get("sources", []),
+    }
 
 
 def _constrain_plan_narration(plan: Any, *, maximum_words: int) -> Any:
@@ -392,8 +428,11 @@ def _narration_excerpt(text: str, *, maximum_words: int, minimum_words: int) -> 
 
 def _video_script_instructions() -> str:
     return """
-You are a senior university lecturer and educational video scriptwriter. Convert the validated
-teaching package into a compact but genuinely explanatory narrated lesson.
+You are an educational video scriptwriter. Convert the validated teaching package into a compact,
+genuinely explanatory lesson for the requested students and a broader audience. Address viewers
+directly in clear language. Define unfamiliar terms before using them; explain why each idea matters.
+Do not narrate teacher instructions, facilitation notes, internal quality checks, rubric details,
+or references to a professor handbook. Keep the academic substance and source qualifications.
 
 Use only information supported by the supplied teaching package. Do not introduce new statistics,
 citations, formulas, claims, or examples that are not supported by it. You may reorganize and
@@ -488,7 +527,7 @@ def build_teaching_video_scenes(result: dict, *, max_minutes: int = 15) -> list[
     purpose = _text(overview.get("lesson_purpose"), f"An academic overview of {title}.")
     scenes = [
         VideoScene(
-            section="PROFESSOR AI EXPLAINER",
+            section="LEARNING EXPLAINER",
             title=title,
             bullets=tuple(
                 value
@@ -528,25 +567,22 @@ def build_teaching_video_scenes(result: dict, *, max_minutes: int = 15) -> list[
         section_title = _text(section.get("title"), "Key concept")
         explanation = _text(content.get("explanation"))
         points = _items(content.get("key_points"))
-        activity = _text(content.get("classroom_activity"))
         check = _text(content.get("concept_check"))
         worked = content.get("worked_example") or content.get("worked_examples")
         worked_text = _text(worked)
-        bullets = tuple((points + [value for value in (worked_text, activity) if value])[:5])
+        bullets = tuple((points + [value for value in (worked_text, check) if value])[:5])
         narration_parts = [section_title + ".", explanation]
         if points:
             narration_parts.append("The main points are " + _spoken_list(points[:5]) + ".")
         if worked_text:
             narration_parts.append("Consider this example. " + worked_text)
-        if activity:
-            narration_parts.append("A useful classroom activity is: " + activity)
         if check:
             narration_parts.append("Check your understanding: " + check)
         narration = " ".join(part for part in narration_parts if part)
         if narration:
             scenes.append(
                 VideoScene(
-                    section=f"{section.get('minutes', '')} MINUTE LESSON SEGMENT".strip(),
+                    section="KEY CONCEPT",
                     title=section_title,
                     bullets=bullets,
                     narration=narration,
@@ -570,7 +606,6 @@ def build_teaching_video_scenes(result: dict, *, max_minutes: int = 15) -> list[
                         "Consider these questions: " + _spoken_list(questions) + "."
                         if questions
                         else "",
-                        _text(case_study.get("teaching_notes")),
                     )
                     if part
                 ),
@@ -588,7 +623,7 @@ def build_teaching_video_scenes(result: dict, *, max_minutes: int = 15) -> list[
             narration=(
                 f"This concludes the explainer on {title}. "
                 + ("Reflect on these questions: " + _spoken_list(review) + ". " if review else "")
-                + "Review the accompanying teaching package for full notes, assessments, and sources."
+                + "Use the source list to explore the ideas further."
             ),
         )
     )

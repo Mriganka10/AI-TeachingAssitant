@@ -73,11 +73,15 @@ Required structured output:
 Generated artifacts:
 
 - JSON source representation for audit and interoperability
-- styled Word teaching handbook with session plan, notes, assessment toolkit, and references
-- paginated PDF teaching handbook with matching academic structure
-- presentation deck with lecture flow, activities, knowledge checks, and sources
+- styled Word teacher-reference handbook with session plan, facilitation notes, answer keys,
+  assessment toolkit, review priorities, and references
+- paginated PDF teacher-reference handbook with the same full academic structure
+- student/audience-facing presentation deck with lecture flow, activities, knowledge checks,
+  answer-reveal slides, misconceptions, and sources; internal teaching tips, Bloom mappings,
+  and professor review checklists stay in the teacher references
 - optional 16:9 multimedia MP4 derived from the validated teaching package. A second structured
-  storyboard pass turns the package into a coherent mini-lecture with concept maps, comparisons,
+  storyboard pass receives only audience-facing material and turns it into a coherent mini-lecture
+  with concept maps, comparisons,
   processes, worked examples, formulas, applications, misconceptions, and a recap. Duration is
   verified against the professor's selected duration range, with distinct scene changes,
   alternating pan/zoom motion, transition

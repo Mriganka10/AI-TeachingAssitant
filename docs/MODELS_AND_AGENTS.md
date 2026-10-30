@@ -70,8 +70,10 @@ generation follows those established exports so narration or encoding failure ca
 existing formats. The browser can display content while those downloads finish.
 
 The video planner makes a separate schema-constrained Responses API call after teaching content is
-validated. It turns the title, objectives, lecture sections, examples, activities, case study, and
-review questions into a coherent 16:9 mini-lecture rather than reading document bullets. The script
+validated. It receives a student/audience-facing projection of the package, excluding private
+facilitation tips, case teaching notes, and internal review priorities. It turns the title,
+objectives, lecture sections, examples, case study, and review questions into a coherent 16:9
+mini-lecture rather than reading document bullets. The script
 must explain definitions, mechanisms, distinctions, examples, misconceptions, and takeaways and
 must satisfy a narration word-range check. Narration then uses the configured OpenAI Speech model
 and voice. The default duration range is 4–15 minutes, and each dashboard request can select any
@@ -81,15 +83,20 @@ concept maps, comparisons, processes, worked examples, formulas, case studies, o
 and video both disclose that the narration is AI-generated. Narration can use OpenAI TTS or the
 optional ElevenLabs long-form provider without changing document generation.
 
-The presentation is intentionally a concise teaching or research deck. Full prose remains in the
-DOCX, PDF, and JSON outputs. Slide layouts summarize long explanations, preserve assessments and
-source lists, clean Markdown links, and paginate only when content cannot fit at presentation size.
+DOCX and PDF are full teacher-reference documents, retaining facilitation guidance, answer keys,
+Bloom mappings, source limitations, and review priorities. PPTX is an audience-facing teaching or
+research deck; it omits internal notes and presents knowledge-check answers on subsequent reveal
+slides. The video explains the same validated topic to students and a broader audience without
+narrating teacher instructions. Slide layouts summarize long explanations, preserve relevant
+assessments and source lists, clean Markdown links, and paginate when content cannot fit at
+presentation size.
 PPTX callouts use consistent visual grouping, MCQ labels are normalized across every exporter, and
 mathematical notation is rendered with Unicode-capable fonts in PDF, DOCX, and PPTX outputs.
 Callout heights, answer areas, and numerical-problem regions are calculated from their content;
 PowerPoint callouts calculate their natural height, select a readable fitting font, and allocate
-separate vertical regions. Dense professor guidance moves to a continuation slide rather than
-overlapping another box. PowerPoint text fitting remains enabled as a final safeguard.
+separate vertical regions. Dense learner-facing misconception guidance moves to a continuation
+slide rather than overlapping another box. PowerPoint text fitting remains enabled as a final
+safeguard.
 
 ## Mode Selection
 

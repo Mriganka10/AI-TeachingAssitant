@@ -6,8 +6,10 @@ from pathlib import Path
 import pytest
 from PIL import Image, ImageChops
 
+from app.agents.llm import LLMService
 from app.artifacts.video import (
     VideoScene,
+    _audience_video_package,
     _concatenate_segments,
     _concept_connector_points,
     _constrain_plan_narration,
@@ -29,6 +31,21 @@ from app.artifacts.video import (
     generate_teaching_video_plan,
 )
 from app.core.config import settings
+
+
+def test_video_planner_receives_only_audience_facing_material() -> None:
+    result = LLMService._mock({"topic": "Cell Structure", "duration_minutes": 60})
+    result["lecture_sections"][0]["content"]["teaching_tip"] = "PRIVATE FACILITATION TIP"
+    result["case_study"]["teaching_notes"] = "PRIVATE CASE GUIDANCE"
+    result["quality_notes"]["review_priorities"] = ["PRIVATE REVIEW PRIORITY"]
+
+    audience_package = _audience_video_package(result)
+    text = str(audience_package)
+    assert "Cell Structure" in text
+    assert "PRIVATE FACILITATION TIP" not in text
+    assert "PRIVATE CASE GUIDANCE" not in text
+    assert "PRIVATE REVIEW PRIORITY" not in text
+    assert "common_errors" in text
 
 
 def test_request_video_duration_overrides_defaults(monkeypatch) -> None:
@@ -240,6 +257,7 @@ def test_video_script_uses_strict_schema_and_meets_long_form_budget(monkeypatch)
                     "content": {
                         "explanation": "Models learn from labelled examples.",
                         "key_points": ["Labels guide learning", "Evaluate on unseen data"],
+                        "teaching_tip": "PRIVATE FACILITATION TIP",
                     },
                 },
                 {
@@ -260,6 +278,7 @@ def test_video_script_uses_strict_schema_and_meets_long_form_budget(monkeypatch)
     text_format = captured["text"]["format"]
     assert text_format["type"] == "json_schema"
     assert text_format["strict"] is True
+    assert "PRIVATE FACILITATION TIP" not in captured["input"]
 
 
 def test_multimedia_scene_types_render_different_visual_compositions(tmp_path: Path) -> None:

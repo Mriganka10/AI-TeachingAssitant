@@ -162,6 +162,58 @@ def test_pdf_and_pptx_keep_the_requested_subject_in_both_agent_workflows(
         assert topic.casefold() in slide_text.casefold()
 
 
+def test_teacher_reference_details_stay_out_of_student_presentation(tmp_path: Path) -> None:
+    result = LLMService._mock({"topic": "Cell Structure", "duration_minutes": 60})
+    result["lecture_sections"][0]["content"]["teaching_tip"] = "PRIVATE FACILITATION TIP"
+    result["case_study"]["teaching_notes"] = "PRIVATE CASE GUIDANCE"
+    result["quality_notes"]["review_priorities"] = ["PRIVATE REVIEW PRIORITY"]
+    paths = create_artifacts(result, agent_type="teaching", output_dir=tmp_path)
+    by_suffix = {path.suffix: path for path in paths}
+    docx_text = "\n".join(p.text for p in Document(by_suffix[".docx"]).paragraphs)
+    pdf_text = "\n".join(p.extract_text() or "" for p in PdfReader(by_suffix[".pdf"]).pages)
+    deck = Presentation(by_suffix[".pptx"])
+    slide_text = "\n".join(
+        shape.text for slide in deck.slides for shape in slide.shapes if hasattr(shape, "text")
+    )
+    for teacher_text in (docx_text, pdf_text):
+        assert "PRIVATE FACILITATION TIP" in teacher_text
+        assert "PRIVATE CASE GUIDANCE" in teacher_text
+        assert "PRIVATE REVIEW PRIORITY" in teacher_text
+    for private_text in (
+        "PRIVATE FACILITATION TIP", "PRIVATE CASE GUIDANCE", "PRIVATE REVIEW PRIORITY",
+        "Professor Review Checklist", "Bloom's Taxonomy Mapping",
+    ):
+        assert private_text not in slide_text
+    assert "Cell Structure" in slide_text
+    question_slide = next(
+        slide for slide in deck.slides
+        if any("Knowledge Check 1" == shape.text for shape in slide.shapes if hasattr(shape, "text"))
+    )
+    question_text = " ".join(shape.text for shape in question_slide.shapes if hasattr(shape, "text"))
+    assert "Answer and explanation" not in question_text
+    assert any(
+        "ANSWER AND EXPLANATION" in shape.text
+        for slide in deck.slides for shape in slide.shapes if hasattr(shape, "text")
+    )
+
+
+def test_research_review_notes_remain_in_reference_not_presentation(tmp_path: Path) -> None:
+    result = LLMService._mock({"research_topic": "Cell Structure Research"})
+    result["quality_notes"]["review_priorities"] = ["PRIVATE RESEARCH REVIEW"]
+    paths = create_artifacts(result, agent_type="research", output_dir=tmp_path)
+    by_suffix = {path.suffix: path for path in paths}
+    docx_text = "\n".join(p.text for p in Document(by_suffix[".docx"]).paragraphs)
+    pdf_text = "\n".join(p.extract_text() or "" for p in PdfReader(by_suffix[".pdf"]).pages)
+    deck = Presentation(by_suffix[".pptx"])
+    slide_text = "\n".join(
+        shape.text for slide in deck.slides for shape in slide.shapes if hasattr(shape, "text")
+    )
+    assert "PRIVATE RESEARCH REVIEW" in docx_text
+    assert "PRIVATE RESEARCH REVIEW" in pdf_text
+    assert "PRIVATE RESEARCH REVIEW" not in slide_text
+    assert "Cell Structure Research" in slide_text
+
+
 def test_exporters_preserve_math_and_normalize_mcq_labels(tmp_path: Path) -> None:
     result = {
         "title": "Equation and Assessment QA",
@@ -263,6 +315,9 @@ def test_pptx_callouts_fit_content_without_overlapping_sections(tmp_path: Path) 
                         "Draw one table with columns x and y and another with only x. Ask students "
                         "which information the algorithm can use during training."
                     ),
+                    "common_errors": [
+                        "Do not assume an unlabeled dataset contains a known prediction target."
+                    ],
                 },
             }
         ],
@@ -318,19 +373,23 @@ def test_pptx_callouts_fit_content_without_overlapping_sections(tmp_path: Path) 
     application = next(
         shape for shape in section_slide.shapes if shape.text.startswith("APPLICATION")
     )
-    professor_note_slide, professor_note = next(
+    misconception_slide, misconception = next(
         (candidate_slide, shape)
         for candidate_slide in presentation.slides
         for shape in candidate_slide.shapes
-        if getattr(shape, "text", "").startswith("PROFESSOR NOTE")
+        if getattr(shape, "text", "").startswith("WATCH OUT FOR")
     )
-    if professor_note_slide == section_slide:
-        assert application.top + application.height <= professor_note.top
+    if misconception_slide == section_slide:
+        assert application.top + application.height <= misconception.top
     else:
         assert any(
-            getattr(shape, "text", "") == "Supervised and Unsupervised Learning: Professor Guidance"
-            for shape in professor_note_slide.shapes
+            getattr(shape, "text", "") == "Supervised and Unsupervised Learning: Common Misconceptions"
+            for shape in misconception_slide.shapes
         )
+    assert not any(
+        "Draw one table with columns x and y" in getattr(shape, "text", "")
+        for slide in presentation.slides for shape in slide.shapes
+    )
     assert "…" not in application.text
 
     numerical_slide = next(

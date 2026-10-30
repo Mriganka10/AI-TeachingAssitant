@@ -529,7 +529,7 @@ def _render_teaching_docx(doc: Document, result: dict) -> None:
 
     sections = _as_list(result.get("lecture_sections"))
     if sections:
-        doc.add_heading("60-Minute Session Plan", level=1)
+        doc.add_heading("Session Plan", level=1)
         plan_rows = []
         for section in sections:
             if not isinstance(section, dict):
@@ -1559,7 +1559,7 @@ def _render_quality_notes_pdf(story: list, result: dict, styles) -> None:
 
 
 # ---------------------------------------------------------------------------
-# PPTX - professor-ready lecture/research presentation
+# PPTX - audience-facing lecture/research presentation
 # ---------------------------------------------------------------------------
 
 
@@ -1701,7 +1701,7 @@ def _create_pptx(result: dict, path: Path, agent_type: str) -> Path:
     else:
         _render_research_pptx(deck, result, accent)
     deck.core_properties.title = _plain_text(result.get("title"), "Professor AI Output")
-    deck.core_properties.subject = "AI-assisted faculty presentation"
+    deck.core_properties.subject = "AI-assisted audience presentation"
     deck.core_properties.author = "Professor AI Workspace"
     deck.save(path)
     return path
@@ -1713,8 +1713,7 @@ def _pptx_title_slide(deck: Presentation, result: dict, agent_type: str, accent:
     slide.background.fill.fore_color.rgb = _pptx_color(NAVY)
     _pptx_add_text(
         slide,
-        "PROFESSOR AI - "
-        + ("TEACHING & CURRICULUM" if agent_type == "teaching" else "RESEARCH SYNTHESIS"),
+        "LEARNING EXPLAINER" if agent_type == "teaching" else "RESEARCH EXPLAINER",
         0.8,
         0.65,
         10.8,
@@ -1747,7 +1746,7 @@ def _pptx_title_slide(deck: Presentation, result: dict, agent_type: str, accent:
     _pptx_add_text(slide, subtitle, 0.84, 5.05, 10.9, 0.58, size=20, color="C0CDDD")
     _pptx_add_text(
         slide,
-        "AI-assisted faculty draft. Verify facts, citations, calculations, and academic suitability.",
+        "AI-assisted presentation • Review sources and important claims before sharing.",
         0.84,
         6.72,
         11.7,
@@ -2241,7 +2240,7 @@ def _pptx_prose_slides(
 def _render_teaching_pptx(deck: Presentation, result: dict, accent: str):
     number = 2
     overview = result.get("overview") if isinstance(result.get("overview"), dict) else {}
-    slide = _pptx_new_slide(deck, "Session Overview", "Teaching Package", number, accent)
+    slide = _pptx_new_slide(deck, "What We Will Explore", "Learning Journey", number, accent)
     number += 1
     _pptx_add_text(
         slide, overview.get("lesson_purpose"), 0.8, 1.6, 7.4, 1.45, size=23, color=NAVY, bold=True
@@ -2770,7 +2769,7 @@ def _pptx_section_slide(deck, section_item: dict, number: int, accent: str) -> i
         )
     section_top = 1.72 + explanation_height + (0.25 if explanation else 0.0)
     _pptx_add_text(
-        slide, "Key teaching points", 0.76, section_top, 5.7, 0.35, size=22, color=NAVY, bold=True
+        slide, "Key ideas", 0.76, section_top, 5.7, 0.35, size=22, color=NAVY, bold=True
     )
     points = _pptx_compact_values(content.get("key_points"), item_limit=90)[:4]
     _pptx_add_bullets(
@@ -2786,22 +2785,21 @@ def _pptx_section_slide(deck, section_item: dict, number: int, accent: str) -> i
 
     worked = content.get("worked_example") or content.get("worked_examples")
     application = _pptx_complete_excerpt(
-        worked or content.get("classroom_activity") or content.get("concept_check"), 430
+        worked or content.get("concept_check"), 430
     )
-    professor_note = _pptx_complete_excerpt(
-        content.get("teaching_tip") or content.get("common_errors"), 320
-    )
+    # Common misconceptions help learners; private facilitation tips belong in DOCX/PDF only.
+    misconception = _pptx_complete_excerpt(content.get("common_errors"), 320)
     right_x = 6.9
     right_width = 5.7
     top = section_top
     bottom = 6.35
     gap = 0.18
-    if application and professor_note:
+    if application and misconception:
         application_height = _pptx_callout_height(
             application, right_width, body_size=15, minimum=1.35, maximum=2.35
         )
         note_height = _pptx_callout_height(
-            professor_note, right_width, body_size=15, minimum=1.05, maximum=1.85
+            misconception, right_width, body_size=15, minimum=1.05, maximum=1.85
         )
         available = bottom - top - gap
         total = application_height + note_height
@@ -2819,15 +2817,15 @@ def _pptx_section_slide(deck, section_item: dict, number: int, accent: str) -> i
                 body_size=15,
             )
             continuation = _pptx_new_slide(
-                deck, f"{title}: Professor Guidance", "Teaching Notes", number + 1, accent
+                deck, f"{title}: Common Misconceptions", "Learning Check", number + 1, accent
             )
             continuation_height = _pptx_callout_height(
-                professor_note, 11.84, body_size=17, minimum=1.1, maximum=4.5
+                misconception, 11.84, body_size=17, minimum=1.1, maximum=4.5
             )
             _pptx_add_callout(
                 continuation,
-                "Professor note",
-                professor_note,
+                "Watch out for",
+                misconception,
                 0.74,
                 1.78,
                 11.84,
@@ -2854,8 +2852,8 @@ def _pptx_section_slide(deck, section_item: dict, number: int, accent: str) -> i
         )
         _pptx_add_callout(
             slide,
-            "Professor note",
-            professor_note,
+            "Watch out for",
+            misconception,
             right_x,
             top + application_height + gap,
             right_width,
@@ -2864,9 +2862,9 @@ def _pptx_section_slide(deck, section_item: dict, number: int, accent: str) -> i
             body_size=15,
         )
     else:
-        single_text = application or professor_note
+        single_text = application or misconception
         if single_text:
-            label = "Application" if application else "Professor note"
+            label = "Application" if application else "Watch out for"
             height = _pptx_callout_height(
                 single_text, right_width, body_size=15, minimum=1.05, maximum=bottom - top
             )
@@ -2901,11 +2899,8 @@ def _pptx_mcq_slide(deck, item: dict, index: int, number: int, accent: str) -> i
         f"{chr(65 + option_index)}. {_pptx_complete_excerpt(_mcq_option_text(option), 220)}"
         for option_index, option in enumerate(_as_list(item.get("options"))[:4])
     ]
-    answer = f"Answer: {item.get('answer')}  {_pptx_complete_excerpt(item.get('explanation'), 380)}"
-    answer_height = _pptx_callout_height(answer, 11.75, body_size=15, minimum=0.92, maximum=1.45)
-    answer_y = 6.72 - answer_height
     options_y = 1.65 + question_height + 0.18
-    options_height = max(1.65, answer_y - options_y - 0.25)
+    options_height = max(1.65, 6.45 - options_y)
     _pptx_add_bullets(
         slide,
         options,
@@ -2917,24 +2912,29 @@ def _pptx_mcq_slide(deck, item: dict, index: int, number: int, accent: str) -> i
         max_items=4,
         show_bullets=False,
     )
-    _pptx_add_callout(
-        slide,
-        "Answer and rationale",
-        answer,
-        0.78,
-        answer_y,
-        11.75,
-        answer_height,
-        accent,
-        body_size=15,
+    # Reveal the answer after learners have had a chance to decide for themselves.
+    answer = f"Answer: {item.get('answer')}  {_pptx_complete_excerpt(item.get('explanation'), 380)}"
+    answer_slide = _pptx_new_slide(
+        deck, f"Knowledge Check {index}: Answer", "Review", number + 1, accent
     )
-    return number + 1
+    _pptx_add_text(
+        answer_slide, question, 0.78, 1.72, 11.75, question_height,
+        size=20, color=NAVY, bold=True,
+    )
+    answer_height = _pptx_callout_height(
+        answer, 11.75, body_size=17, minimum=1.2, maximum=3.0
+    )
+    _pptx_add_callout(
+        answer_slide, "Answer and explanation", answer, 0.78,
+        2.0 + question_height, 11.75, answer_height, accent, body_size=17,
+    )
+    return number + 2
 
 
 def _render_teaching_pptx(deck: Presentation, result: dict, accent: str):
     number = 2
     overview = result.get("overview") if isinstance(result.get("overview"), dict) else {}
-    slide = _pptx_new_slide(deck, "Session Overview", "Teaching Package", number, accent)
+    slide = _pptx_new_slide(deck, "What We Will Explore", "Learning Journey", number, accent)
     number += 1
     lesson_purpose = _pptx_complete_excerpt(overview.get("lesson_purpose"), 420)
     purpose_height = _pptx_callout_height(
@@ -2942,7 +2942,7 @@ def _render_teaching_pptx(deck: Presentation, result: dict, accent: str):
     )
     _pptx_add_callout(
         slide,
-        "Lesson purpose",
+        "Why this matters",
         lesson_purpose,
         0.72,
         1.75,
@@ -2963,7 +2963,7 @@ def _render_teaching_pptx(deck: Presentation, result: dict, accent: str):
     _pptx_add_bullets(slide, details, 8.55, 1.8, 3.75, details_height, size=17, max_items=4)
     lower_top = max(1.75 + purpose_height, 1.8 + details_height) + 0.42
     _pptx_add_text(
-        slide, "Prerequisite knowledge", 0.76, lower_top, 5.7, 0.35, size=22, color=NAVY, bold=True
+        slide, "What you already know", 0.76, lower_top, 5.7, 0.35, size=22, color=NAVY, bold=True
     )
     _pptx_add_bullets(
         slide,
@@ -2976,7 +2976,7 @@ def _render_teaching_pptx(deck: Presentation, result: dict, accent: str):
         max_items=3,
     )
     _pptx_add_text(
-        slide, "Evidence base", 6.82, lower_top, 5.5, 0.35, size=22, color=NAVY, bold=True
+        slide, "What this is based on", 6.82, lower_top, 5.5, 0.35, size=22, color=NAVY, bold=True
     )
     _pptx_add_bullets(
         slide,
@@ -2990,22 +2990,20 @@ def _render_teaching_pptx(deck: Presentation, result: dict, accent: str):
     )
 
     objectives = [
-        f"{item.get('id')}: {_pptx_complete_excerpt(item.get('objective'), 145)} "
-        f"[{item.get('bloom_level')}]"
+        _pptx_complete_excerpt(item.get('objective'), 145)
         if isinstance(item, dict)
         else _pptx_complete_excerpt(item, 160)
         for item in _as_list(result.get("learning_objectives"))
     ]
     number = _pptx_compact_list_slides(
         deck,
-        title="Learning Objectives",
-        section="Teaching Package",
+        title="By the End, You Can",
+        section="Learning Journey",
         values=objectives,
         number=number,
         accent=accent,
         max_items=6,
         size=18,
-        footer="Each objective is mapped to an assessment.",
     )
     sections = [item for item in _as_list(result.get("lecture_sections")) if isinstance(item, dict)]
     roadmap = [
@@ -3015,7 +3013,7 @@ def _render_teaching_pptx(deck: Presentation, result: dict, accent: str):
     number = _pptx_compact_list_slides(
         deck,
         title="Session Roadmap",
-        section="Teaching Package",
+        section="Learning Journey",
         values=roadmap,
         number=number,
         accent=accent,
@@ -3168,29 +3166,21 @@ def _render_teaching_pptx(deck: Presentation, result: dict, accent: str):
             accent,
         )
 
+    # Bloom mappings and review priorities are preserved in the teacher reference documents.
     number = _pptx_compact_list_slides(
         deck,
-        title="Bloom's Taxonomy Mapping",
-        section="Assessment",
-        values=result.get("bloom_mapping"),
-        number=number,
-        accent=accent,
-        max_items=6,
-        item_limit=145,
-        size=17,
-    )
-    number = _pptx_compact_list_slides(
-        deck,
-        title="Viva Questions",
-        section="Assessment",
-        values=result.get("viva_questions"),
+        title="Try These Questions",
+        section="Learning Check",
+        values=[
+            item.get("question") if isinstance(item, dict) else item
+            for item in _as_list(result.get("viva_questions"))
+        ],
         number=number,
         accent=accent,
         max_items=5,
         item_limit=180,
         size=17,
     )
-    number = _pptx_quality_slides(deck, result, number, accent)
     _pptx_sources_slide(deck, result, number, accent)
 
 
@@ -3285,7 +3275,7 @@ def _render_research_pptx(deck: Presentation, result: dict, accent: str):
 
     number = _pptx_compact_list_slides(
         deck,
-        title="Methodology Comparison",
+        title="How the Studies Were Done",
         section="Research Design",
         values=result.get("methodology_comparison"),
         number=number,
@@ -3341,7 +3331,7 @@ def _render_research_pptx(deck: Presentation, result: dict, accent: str):
     )
     number = _pptx_compact_list_slides(
         deck,
-        title="Methodology Recommendations",
+        title="How We Could Study This Next",
         section="Research Design",
         values=result.get("methodology_suggestions"),
         number=number,
@@ -3350,7 +3340,6 @@ def _render_research_pptx(deck: Presentation, result: dict, accent: str):
         item_limit=260,
         size=17,
     )
-    number = _pptx_quality_slides(deck, result, number, accent)
     _pptx_sources_slide(deck, result, number, accent)
 
 
@@ -3408,5 +3397,5 @@ def _pptx_sources_slide(deck: Presentation, result: dict, number: int, accent: s
         max_items=5,
         item_limit=210,
         size=15,
-        footer="Verify citation details before academic publication or distribution.",
+        footer="Sources are listed for further reading; check key claims against the originals.",
     )

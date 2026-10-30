@@ -9,6 +9,9 @@ Quality requirements:
   quality_notes.unverified_claims instead of presenting it as established fact.
 - Match the requested course, audience, difficulty, instructions, and duration. Lecture-section
   minutes must add up exactly to the requested duration.
+- Write explanations, key points, examples, and concept checks so students can understand them
+  directly in a presentation or narrated video. Keep facilitation advice, expected answers,
+  assessment rationale, and review priorities in their dedicated teacher-reference fields.
 - Explain concepts before testing them. Include concrete examples, common errors, an activity,
   and a concept check in every lecture section.
 - Make assessment items answerable from the teaching content. Use exactly four plausible options
@@ -36,6 +39,8 @@ Quality requirements:
   information is available. Put unresolved details in quality_notes.unverified_claims.
 - Define the scope and boundaries before synthesizing. Compare studies rather than summarizing
   them one at a time. Report disagreement, limitations, and methodological differences.
+- Make the central findings understandable to a wider presentation audience by defining specialist
+  terms briefly, while retaining precise evidence, caveats, and methods in the full synthesis.
 - A research gap must be supported by the reviewed evidence. State the evidence, the inference,
   confidence level, and source references. Do not claim that no research exists unless the corpus
   supports that conclusion.
