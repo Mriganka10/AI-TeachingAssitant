@@ -26,6 +26,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Phase 2 video animations. Needs Cairo and Pango system libraries (see docs/SETUP.md).
+animations = [
+  "manim>=0.19",
+]
 dev = [
   "pytest>=8.4.0",
   "httpx>=0.28.0",

@@ -55,18 +55,13 @@ def _visible_text(value: Any) -> str:
 
 def topic_relevance_issues(agent_type: str, result: dict, request: dict) -> list[str]:
     """Reject outputs whose framing or substantive sections omit the requested subject."""
-    topic = str(request.get("topic") or request.get("research_topic") or "").strip()
+    topic = str(request.get("topic") or "").strip()
     anchors = topic_terms(topic)
     if not anchors:
         return []
 
     framing = _visible_text(result.get("title"))
-    if agent_type == "teaching":
-        substantive = _visible_text(result.get("lecture_sections"))
-    else:
-        substantive = _visible_text(
-            (result.get("executive_summary"), result.get("themes"), result.get("research_gaps"))
-        )
+    substantive = _visible_text(result.get("lecture_sections"))
 
     issues: list[str] = []
     minimum_framing_terms = _minimum_topic_terms(anchors)

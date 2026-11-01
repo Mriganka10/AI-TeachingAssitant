@@ -5,6 +5,9 @@
 - Git
 - Python 3.11, 3.12, or 3.13 recommended
 - A valid OpenAI API key for live generation
+- Optional, for video animations: Cairo and Pango development libraries
+  (Debian/Ubuntu: `sudo apt install build-essential pkg-config libcairo2-dev libpango1.0-dev`;
+  macOS: `brew install cairo pango pkg-config`)
 
 Python 3.12 matches the Docker image and is the preferred local version.
 
@@ -54,7 +57,85 @@ ELEVENLABS_VOICE_ID=JBFqnCBsd6RMkjVDRZzb
 ELEVENLABS_OUTPUT_FORMAT=mp3_44100_128
 ELEVENLABS_STABILITY=0.55
 ELEVENLABS_SIMILARITY_BOOST=0.78
+VIDEO_SCRIPT_REVIEW_ENABLED=true
+VIDEO_ILLUSTRATIONS_ENABLED=true
+VIDEO_MAX_ILLUSTRATIONS=8
+VIDEO_CAPTIONS_ENABLED=true
+GEMINI_API_KEY=
+GEMINI_IMAGE_MODEL=gemini-2.5-flash-image
+GEMINI_IMAGE_TIMEOUT_SECONDS=90
+VIDEO_ANIMATIONS_ENABLED=true
+VIDEO_MAX_ANIMATIONS=4
+VIDEO_ANIMATION_RENDER_TIMEOUT_SECONDS=180
+VIDEO_ANIMATION_REPAIR_ATTEMPTS=1
+VIDEO_CINEMATIC_CLIPS=false
+VIDEO_MAX_CINEMATIC_CLIPS=2
+VIDEO_CINEMATIC_SECONDS=8
+VEO_MODEL=veo-3.1-lite-generate-preview
+VEO_RESOLUTION=720p
+VEO_TIMEOUT_SECONDS=420
+VEO_POLL_INTERVAL_SECONDS=10
+RESEARCH_MAX_MANUSCRIPT_CHARS=220000
+RESEARCH_RELATED_CONTEXT_CHARS=40000
+RESEARCH_REVISION_WORKERS=4
+RESEARCH_REVISION_MAX_WORDS=1600
+RESEARCH_REASONING_EFFORT=medium
+RESEARCH_MAX_NEW_SOURCES=12
+RESEARCH_MAX_NEW_SECTIONS=4
+RESEARCH_SOURCE_TIMEOUT_SECONDS=15
+RESEARCH_CONTACT_EMAIL=
 ```
+
+Research assistant settings (all optional):
+
+- `RESEARCH_MAX_MANUSCRIPT_CHARS` limits how much of a manuscript is reviewed (about 35,000 words
+  by default). Longer papers are reviewed up to the limit and the report says so.
+- `RESEARCH_RELATED_CONTEXT_CHARS` limits how much of the research-paper library is sent with the
+  manuscript for literature positioning.
+- `RESEARCH_REVISION_WORKERS` sets how many sections are revised at the same time, and
+  `RESEARCH_REVISION_MAX_WORDS` the largest block revised in one call. Lower the workers if you hit
+  OpenAI rate limits.
+- `RESEARCH_REASONING_EFFORT` sets how deeply the review and revision calls reason (`low`,
+  `medium` or `high`; higher is slower and costs more). `RESEARCH_MAX_NEW_SOURCES` and
+  `RESEARCH_MAX_NEW_SECTIONS` cap added references and sections. New references are confirmed
+  against `api.crossref.org` and `export.arxiv.org`, so the server must be able to reach them;
+  set `RESEARCH_CONTACT_EMAIL` to use Crossref's faster "polite" pool.
+- Exported review and manuscript PDFs use Carlito, Caladea and Liberation fonts when installed
+  (metric-compatible with Calibri, Cambria and Times New Roman). The Docker image installs them;
+  locally, install `fonts-crosextra-carlito fonts-crosextra-caladea fonts-liberation` or the
+  PDFs fall back to DejaVu.
+
+Video quality settings (all optional):
+
+- `VIDEO_SCRIPT_REVIEW_ENABLED` adds a second "senior teacher" pass over the video script. The
+  reviewed script is used only if it still passes every check, so it can't make a video worse.
+- `GEMINI_API_KEY` turns on illustrated scenes (Google AI Studio key). Without it, videos use the
+  drawn diagrams exactly as before. `VIDEO_MAX_ILLUSTRATIONS` caps image calls per video (about
+  $0.04–0.07 per image at current list prices). `GEMINI_IMAGE_MODEL` can be switched to a newer
+  image model, such as `gemini-3.1-flash-image`, without code changes.
+- `VIDEO_CAPTIONS_ENABLED` draws captions below the lesson card and adds a switchable subtitle
+  track to the MP4.
+- `VIDEO_ANIMATIONS_ENABLED` adds Manim animations to maths, graph, physics and algorithm
+  scenes. It works only when Manim is installed: `pip install -e ".[animations]"` after the Cairo
+  and Pango libraries above. Without Manim, these scenes use drawn diagrams and nothing else
+  changes. `VIDEO_MAX_ANIMATIONS` caps animated scenes per video (each costs one extra model call,
+  two if it needs a repair, and about 10 to 60 seconds of rendering).
+  `VIDEO_ANIMATION_RENDER_TIMEOUT_SECONDS` stops a slow render, and
+  `VIDEO_ANIMATION_REPAIR_ATTEMPTS` sets how many times a failed render is sent back for a fix.
+  Installing LaTeX (`texlive-latex-base texlive-latex-extra texlive-fonts-recommended dvisvgm`)
+  lets animations typeset formulas; without it they write formulas as plain text.
+
+- `VIDEO_CINEMATIC_CLIPS=true` brings a few picture scenes to life with short Veo clips (the
+  opening scene first): the scene's illustration is the first frame and gently moves while the
+  narrator speaks. It uses the same `GEMINI_API_KEY` and needs illustrations to be on. It is off
+  by default because it is billed per second of video: with the default Lite model at 720p, an
+  8-second clip is about $0.40, so the default cap of 2 clips adds about $0.80 per video. Check
+  current Gemini API prices before changing `VEO_MODEL` (Fast and standard Veo cost more). Clips
+  generate while narration is recorded; any clip not ready within `VEO_TIMEOUT_SECONDS`, or that
+  fails, leaves the still picture. `VIDEO_CINEMATIC_SECONDS` can be 4, 6 or 8.
+
+Docker images include animations by default. Build with `--build-arg WITH_ANIMATIONS=false` for
+a smaller image without them, or `--build-arg WITH_LATEX=true` to add LaTeX.
 
 `imageio-ffmpeg` installs the video encoder with the Python dependencies. Multimedia video is
 opt-in in the Teaching Assistant form and is not created for document-only requests. OpenAI builds
@@ -68,8 +149,8 @@ before video assembly. Do not set `pcm_44100` unless the ElevenLabs account is o
 Keep `VIDEO_TTS_SPEED` between `0.75` and `1.20`; the default `0.95` is recommended for clear
 academic narration. The renderer rejects unexpectedly short narration instead of returning a
 one-minute or mostly silent lesson. It rebuilds the final audio/video timeline, verifies that the
-MP4 is at least `VIDEO_MIN_MINUTES`, and uses alternating pan/zoom motion plus visible transitions
-between the storyboard's distinct scenes.
+MP4 is at least `VIDEO_MIN_MINUTES`, builds each diagram up step by step, and uses animated
+transitions between the storyboard's distinct scenes.
 Speech services may return a WAV with a long silent tail. The application now measures audible
 samples, trims that tail, allocates time to every planned scene, and checks the completed MP4 for
 visual progression. If a provider returns too little usable speech, the video reports a warning

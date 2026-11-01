@@ -19,8 +19,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.agents.llm import llm
+from app.agents.manuscript import Manuscript, parse_manuscript
 from app.agents.prompts import RESEARCH_SYSTEM, TEACHING_SYSTEM
 from app.agents.retrieval import retrieve_context
+from app.agents.revision import build_revision
 from app.artifacts.generator import create_artifacts
 from app.artifacts.video import create_teaching_video
 from app.core.audit import audit
@@ -183,6 +185,7 @@ def list_documents(
             "filename": doc.filename,
             "collection": doc.collection,
             "size_bytes": doc.size_bytes,
+            "uploaded_at": doc.created_at,
             "status": doc.status,
         }
         for doc in docs
@@ -208,7 +211,97 @@ def research_agent(
     user: CurrentUser = Depends(current_user),
     db: Session = Depends(get_db),
 ):
-    return _enqueue_agent("research", payload.model_dump(), background_tasks, request, user, db)
+    manuscript = db.scalar(
+        select(SourceDocument).where(
+            SourceDocument.id == payload.manuscript_document_id,
+            SourceDocument.tenant_id == user.tenant_id,
+        )
+    )
+    if not manuscript:
+        raise HTTPException(status_code=404, detail="Manuscript not found. Upload the paper first.")
+    if not (manuscript.extracted_text or "").strip():
+        raise HTTPException(status_code=422, detail="No readable text was found in the manuscript.")
+    data = payload.model_dump()
+    data["manuscript_filename"] = manuscript.filename
+    return _enqueue_agent("research", data, background_tasks, request, user, db)
+
+
+SUPPORTED_JOB_TYPES = ("teaching", "research")
+
+
+def _review_manuscript(db: Session, job: AgentJob, payload: dict) -> tuple[dict, str]:
+    """Run the peer review of one uploaded manuscript."""
+    document = db.scalar(
+        select(SourceDocument).where(
+            SourceDocument.id == payload.get("manuscript_document_id"),
+            SourceDocument.tenant_id == job.tenant_id,
+        )
+    )
+    if not document or not (document.extracted_text or "").strip():
+        raise RuntimeError("The manuscript is no longer available or has no readable text.")
+    manuscript = parse_manuscript(document.extracted_text)
+    outline = manuscript.to_payload()
+    abstract = " ".join(
+        paragraph["text"]
+        for section in outline["sections"]
+        if section["kind"] == "abstract"
+        for paragraph in section["paragraphs"]
+    )
+    related = retrieve_context(
+        db,
+        tenant_id=job.tenant_id,
+        query=f"{manuscript.title} {abstract}"[:4000],
+        collections=payload.get("collections") or [],
+        exclude_document_ids=(document.id,),
+        max_chars=settings.research_related_context_chars,
+    )
+    request_fields = {
+        key: payload.get(key)
+        for key in ("discipline", "paper_type", "target_venue", "instructions")
+    }
+    review, model = llm.generate(
+        agent_type="research",
+        system=RESEARCH_SYSTEM,
+        payload={**request_fields, "manuscript": outline, "related_literature": related},
+        use_web_search=bool(payload.get("use_web_search")),
+        reasoning_effort=settings.research_reasoning_effort,
+    )
+    request_summary = {
+        **request_fields,
+        "author_name": payload.get("author_name", ""),
+        "manuscript_filename": payload.get("manuscript_filename") or document.filename,
+    }
+    return {**review, "request": request_summary, "manuscript": outline}, model
+
+
+def parse_manuscript_payload(result: dict) -> Manuscript:
+    return Manuscript.from_payload(result.get("manuscript") or {})
+
+
+def _revision_warning(result: dict) -> str | None:
+    revision = result.get("revision") or {}
+    sections = revision.get("sections") or []
+    kept = [
+        section.get("heading") or section.get("id")
+        for section in sections
+        if section.get("kind") in {"abstract", "body"}
+        and section.get("status") in {"kept_original", "partly_revised"}
+    ]
+    dropped = revision.get("dropped_sections") or []
+    notes = []
+    if kept:
+        notes.append(
+            "These sections were left fully or partly as written because an automatic edit could "
+            "not keep every citation and number intact: " + ", ".join(str(item) for item in kept) + "."
+        )
+    if dropped:
+        notes.append(
+            "These planned new sections were left out because they could not be written without "
+            "unsupported content: " + ", ".join(str(item) for item in dropped) + "."
+        )
+    if not notes:
+        return None
+    return "The review and revised paper are ready. " + " ".join(notes)
 
 
 def _enqueue_agent(
@@ -265,6 +358,8 @@ def run_agent_job(job_id: str) -> None:
         payload = job.request_payload
         tenant_id = job.tenant_id
         actor_email = job.created_by
+        if agent_type not in SUPPORTED_JOB_TYPES:
+            raise RuntimeError(f"Unsupported assistant: {agent_type}.")
 
         # A worker may be restarted after the validated content was committed but before all
         # exports were written. Reuse that content instead of paying for and waiting on a second
@@ -272,13 +367,20 @@ def run_agent_job(job_id: str) -> None:
         if job.result_payload:
             result = job.result_payload
             model = job.model or settings.openai_model
+        elif agent_type == "research":
+            result, model = _review_manuscript(db, job, payload)
+            job.result_payload = result
+            job.model = model
+            job.status = "content_ready"
+            job.error_message = None
+            db.commit()
         else:
-            system_prompt = TEACHING_SYSTEM if agent_type == "teaching" else RESEARCH_SYSTEM
+            system_prompt = TEACHING_SYSTEM
             query = " ".join(
                 str(value)
                 for value in (
-                    payload.get("topic") or payload.get("research_topic", ""),
-                    payload.get("course") or payload.get("discipline", ""),
+                    payload.get("topic", ""),
+                    payload.get("course", ""),
                     payload.get("instructions", ""),
                 )
                 if value
@@ -303,11 +405,22 @@ def run_agent_job(job_id: str) -> None:
             job.error_message = None
             db.commit()
 
+        if (
+            agent_type == "research"
+            and payload.get("generate_revision", True)
+            and not result.get("revision")
+        ):
+            manuscript = parse_manuscript_payload(result)
+            result = {**result, "revision": build_revision(manuscript, result, payload)}
+            job.result_payload = result
+            db.commit()
+
         output_dir = settings.data_dir / "generated" / job.id
         paths = create_artifacts(
             result,
             agent_type=agent_type,
             output_dir=output_dir,
+            author=payload.get("author_name", "") if agent_type == "research" else "",
         )
         for path in paths:
             _persist_artifact(db, path, tenant_id=tenant_id, job_id=job.id)
@@ -336,11 +449,13 @@ def run_agent_job(job_id: str) -> None:
                 # Video is optional. Preserve all established document formats if narration or
                 # encoding is temporarily unavailable.
                 video_warning = (
-                    "JSON, DOCX, PDF, and PPTX are ready, but the optional video could not be "
-                    f"generated: {exc}"
+                    "Your teacher's guide and slides are ready, but the video could not be "
+                    f"made this time: {exc}"
                 )[:2000]
         job.status = "completed"
-        job.error_message = video_warning
+        job.error_message = video_warning or (
+            _revision_warning(result) if agent_type == "research" else None
+        )
         job.completed_at = datetime.now(UTC)
         db.commit()
         persisted_artifacts = db.scalars(
@@ -357,7 +472,7 @@ def run_agent_job(job_id: str) -> None:
             details={
                 "model": model,
                 "artifact_count": len(persisted_artifacts),
-                "video_requested": bool(payload.get("generate_video")),
+                "video_requested": video_requested,
                 "video_generated": any(
                     item.artifact_type == "mp4" for item in persisted_artifacts
                 ),
@@ -420,12 +535,22 @@ def _serialize_job(db: Session, job: AgentJob, *, include_result: bool = True) -
     ).all()
     response = {
         "job_id": job.id,
+        "agent_type": job.agent_type,
         "status": job.status,
+        # The original lesson request lets the UI show what was asked for (e.g. a video).
+        "request": job.request_payload,
+        "started_at": job.started_at,
+        "completed_at": job.completed_at,
         "result": job.result_payload if include_result else None,
         "error": job.error_message if job.status in {"failed", "artifact_failed"} else None,
         "warning": job.error_message if job.status == "completed" else None,
         "artifacts": [
-            {"id": item.id, "filename": item.filename, "type": item.artifact_type}
+            {
+                "id": item.id,
+                "filename": item.filename,
+                "type": item.artifact_type,
+                "size_bytes": item.size_bytes,
+            }
             for item in artifacts
         ],
     }
@@ -454,7 +579,7 @@ def download_artifact(
 def list_jobs(user: CurrentUser = Depends(current_user), db: Session = Depends(get_db)):
     jobs = db.scalars(
         select(AgentJob)
-        .where(AgentJob.tenant_id == user.tenant_id)
+        .where(AgentJob.tenant_id == user.tenant_id, AgentJob.agent_type.in_(SUPPORTED_JOB_TYPES))
         .order_by(AgentJob.started_at.desc())
         .limit(50)
     )
@@ -464,16 +589,19 @@ def list_jobs(user: CurrentUser = Depends(current_user), db: Session = Depends(g
             "agent_type": job.agent_type,
             "status": job.status,
             "model": job.model,
-            "title": (
-                job.request_payload.get("topic")
-                or job.request_payload.get("research_topic")
-                or "Untitled faculty task"
-            ),
-            "course": job.request_payload.get("course") or job.request_payload.get("discipline"),
+            "title": _job_title(job),
+            "course": job.request_payload.get("course") or job.request_payload.get("target_venue"),
             "started_at": job.started_at,
         }
         for job in jobs
     ]
+
+
+def _job_title(job: AgentJob) -> str:
+    if job.agent_type == "research":
+        reviewed = (job.result_payload or {}).get("title") if job.result_payload else None
+        return reviewed or job.request_payload.get("manuscript_filename") or "Manuscript review"
+    return job.request_payload.get("topic") or "Untitled lesson"
 
 
 @router.get("/jobs/{job_id}")

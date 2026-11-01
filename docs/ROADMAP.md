@@ -6,7 +6,11 @@ Status: implemented.
 
 - Professional professor login and dashboard
 - Email OTP and session authentication
-- Teaching and Research assistants
+- AI Teaching Assistant
+- Research Paper Assistant: manuscript review report, revised paper and tracked-changes copy
+- Student slide template with diagrams, icons and animations; animated narrated video
+- Plain-language writing checks and neutral document metadata
+- UI: lesson builder, paper review form, lesson and review history, uploaded-files library
 - Uploaded academic-source library
 - Optional OpenAI web search
 - JSON, DOCX, PDF, and PPTX artifacts
@@ -53,7 +57,7 @@ Status: core production path implemented in September 2026.
 
 ## Phase 5: Institutional Product
 
-- departments, courses, and research projects
+- departments, courses, and teaching teams
 - Cognito or institutional SSO
 - professor, reviewer, and administrator roles
 - source-sharing permissions
@@ -65,7 +69,7 @@ Status: core production path implemented in September 2026.
 
 - lecture-package versioning
 - professor comments and approval
-- co-author research workspace
+- co-teaching workspace for shared lessons
 - export templates with university branding
 - assignment and rubric library
 - LMS integration

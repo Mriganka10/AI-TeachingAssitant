@@ -10,12 +10,12 @@ governance, or responsibility for published and taught material.
 The platform may process:
 
 - professor email identity
-- unpublished research papers and drafts
+- unpublished lecture notes and drafts
 - licensed books and case studies
 - student-facing assessment material
 - institutional notes and curriculum
 - generated questions, answers, and rubrics
-- research ideas and potential intellectual property
+- original course design and potential intellectual property
 
 Treat all uploaded and generated material as confidential unless explicitly classified otherwise.
 
@@ -76,7 +76,7 @@ Treat all uploaded and generated material as confidential unless explicitly clas
 - Keep system prompts separate from retrieved text.
 - Do not let retrieved documents override application policy.
 - Add source provenance to final output.
-- Introduce citation verification before production research use.
+- Introduce citation verification before production classroom use.
 
 ## Incident Response
 

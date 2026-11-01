@@ -13,13 +13,22 @@ MAX_CHUNKS_PER_DOCUMENT = 3
 
 
 def retrieve_context(
-    db: Session, *, tenant_id: str, query: str, collections: list[str], limit: int = 12
+    db: Session,
+    *,
+    tenant_id: str,
+    query: str,
+    collections: list[str],
+    limit: int = 12,
+    exclude_document_ids: tuple[str, ...] = (),
+    max_chars: int | None = None,
 ) -> list[dict]:
     """Retrieve focused, source-labelled chunks instead of whole-document prefixes."""
     statement = select(SourceDocument).where(
         SourceDocument.tenant_id == tenant_id,
         SourceDocument.status == "ready",
     )
+    if exclude_document_ids:
+        statement = statement.where(SourceDocument.id.not_in(exclude_document_ids))
     if collections:
         statement = statement.where(SourceDocument.collection.in_(collections))
     documents = list(db.scalars(statement.order_by(SourceDocument.created_at.desc()).limit(250)))
@@ -39,7 +48,7 @@ def retrieve_context(
     )
     selected: list[dict] = []
     per_document: Counter[str] = Counter()
-    remaining = settings.max_context_chars
+    remaining = settings.max_context_chars if max_chars is None else max_chars
     for (document, chunk_index, text), score in ranked:
         if per_document[document.id] >= MAX_CHUNKS_PER_DOCUMENT:
             continue

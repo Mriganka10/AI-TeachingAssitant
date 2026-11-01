@@ -33,7 +33,7 @@ Stores:
 Stores:
 
 - tenant and professor
-- teaching or research agent type
+- agent type (`teaching` or `research`)
 - lifecycle status
 - request and result JSON
 - model name
@@ -57,9 +57,6 @@ Stores actor, tenant, event type, entity, status, request ID, IP address, detail
 - `agent.teaching.queued`
 - `agent.teaching.completed`
 - `agent.teaching.failed`
-- `agent.research.queued`
-- `agent.research.completed`
-- `agent.research.failed`
 
 Queued events are emitted when the HTTP request creates a job. Completion and failure events are
 emitted by the asynchronous worker, or by the local background backend during development.
