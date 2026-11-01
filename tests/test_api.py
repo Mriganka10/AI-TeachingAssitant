@@ -31,12 +31,12 @@ def test_health_and_auth() -> None:
         assert client.get("/api/auth/me").json()["role"] == "professor"
 
 
-def test_upload_and_both_agents() -> None:
+def test_upload_and_teaching_agent() -> None:
     with TestClient(app) as client:
         login(client)
         upload = client.post(
             "/api/documents",
-            data={"collection": "research_papers"},
+            data={"collection": "previous_notes"},
             files={"file": ("paper.txt", b"Longitudinal evidence is limited.", "text/plain")},
         )
         assert upload.status_code == 200
@@ -49,24 +49,38 @@ def test_upload_and_both_agents() -> None:
         assert teaching_job.status_code == 200
         assert teaching_job.json()["status"] == "completed"
         assert {a["type"] for a in teaching_job.json()["artifacts"]} == {"json", "docx", "pdf", "pptx"}
-        research = client.post(
-            "/api/agents/research",
-            json={"research_topic": "Responsible AI adoption", "use_web_search": False},
-        )
-        assert research.status_code == 200
-        research_job = client.get(f"/api/jobs/{research.json()['job_id']}")
-        assert research_job.status_code == 200
-        assert research_job.json()["result"]["research_gaps"]
-        assert {a["type"] for a in research_job.json()["artifacts"]} == {
-            "json",
-            "docx",
-            "pdf",
-            "pptx",
-        }
         jobs = client.get("/api/jobs")
         assert jobs.status_code == 200
-        assert jobs.json()[0]["title"] == "Responsible AI adoption"
+        assert jobs.json()[0]["title"] == "Responsible AI"
         assert Path("data").exists()
+
+
+def test_research_endpoint_requires_an_uploaded_manuscript() -> None:
+    with TestClient(app) as client:
+        login(client)
+        missing = client.post(
+            "/api/agents/research", json={"manuscript_document_id": "does-not-exist"}
+        )
+        assert missing.status_code == 404
+        invalid = client.post("/api/agents/research", json={"research_topic": "Old request"})
+        assert invalid.status_code == 422
+
+        # An unknown assistant type fails cleanly instead of running.
+        with SessionLocal() as db:
+            legacy = AgentJob(
+                tenant_id="example-edu",
+                created_by="professor@example.edu",
+                agent_type="synthesis",
+                request_payload={"research_topic": "Legacy synthesis"},
+            )
+            db.add(legacy)
+            db.commit()
+            legacy_id = legacy.id
+        routes.run_agent_job(legacy_id)
+        job = client.get(f"/api/jobs/{legacy_id}").json()
+        assert job["status"] == "failed"
+        assert "Unsupported assistant" in job["error"]
+        assert all(item["id"] != legacy_id for item in client.get("/api/jobs").json())
 
 
 def test_new_user_email_verification_starts_ses_identity(monkeypatch) -> None:
@@ -176,7 +190,7 @@ def test_agent_failure_returns_json_detail(monkeypatch) -> None:
 def test_validated_content_is_committed_before_artifact_generation(monkeypatch) -> None:
     observed: dict = {}
 
-    def inspect_content_checkpoint(result, *, agent_type, output_dir):
+    def inspect_content_checkpoint(result, *, agent_type, output_dir, author=""):
         with SessionLocal() as db:
             job = db.get(AgentJob, output_dir.name)
             observed["status"] = job.status
@@ -210,13 +224,13 @@ def test_artifact_failure_preserves_generated_content(monkeypatch) -> None:
     with TestClient(app) as client:
         login(client)
         response = client.post(
-            "/api/agents/research",
-            json={"research_topic": "Durable content", "use_web_search": False},
+            "/api/agents/teaching",
+            json={"topic": "Durable content", "use_web_search": False},
         )
         job = client.get(f"/api/jobs/{response.json()['job_id']}").json()
 
     assert job["status"] == "artifact_failed"
-    assert job["result"]["research_gaps"]
+    assert job["result"]["lecture_sections"]
     assert "Content was generated, but document export failed" in job["error"]
 
 
@@ -294,7 +308,7 @@ def test_video_failure_does_not_remove_existing_document_formats(monkeypatch) ->
         "pdf",
         "pptx",
     }
-    assert "optional video could not be generated" in job["warning"]
+    assert "the video could not be made" in job["warning"]
 
 
 def test_frontend_handles_non_json_api_responses() -> None:
@@ -302,15 +316,26 @@ def test_frontend_handles_non_json_api_responses() -> None:
 
     assert "parseApiResponse" in script
     assert "nonJsonApiMessage" in script
-    assert "HTML page instead of agent data" in script
-    assert "waitForJob" in script
+    assert "Your session has ended" in script  # HTML login page instead of JSON
+    assert "openLesson" in script  # polls the job until it finishes
     assert "/api/jobs/" in script
-    assert 'job.status === "content_ready"' in script
-    assert 'job.status === "documents_ready"' in script
+    for status in ("content_ready", "documents_ready", "completed", "failed", "artifact_failed"):
+        assert status in script
     assert "generate_video" in script
     assert "video_min_minutes" in script
     assert "video_max_minutes" in script
     assert "maxAttempts" not in script
+
+
+def test_frontend_offers_both_assistants() -> None:
+    page = Path("app/static/index.html").read_text()
+    script = Path("app/static/app.js").read_text()
+
+    assert "/api/agents/teaching" in script
+    assert "/api/agents/research" in script
+    assert 'id="teaching-form"' in page and 'id="review-form"' in page
+    assert 'value="research_papers"' in page and 'value="manuscripts"' in page
+    assert 'data-page="reviews"' in page
 
 
 def test_teaching_video_duration_range_is_validated() -> None:

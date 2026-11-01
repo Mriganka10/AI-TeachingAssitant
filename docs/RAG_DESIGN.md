@@ -7,10 +7,16 @@ material rather than relying only on general model knowledge.
 
 ## Supported Collections
 
-- `research_papers`
-- `previous_notes`
+- `previous_notes` (shown as "Lecture notes" in the UI)
 - `books`
 - `case_studies`
+
+- `research_papers`: related literature the Research Paper Assistant uses to position a
+  manuscript. The manuscript under review is always excluded, and this context is capped by
+  `RESEARCH_RELATED_CONTEXT_CHARS`.
+- `manuscripts`: papers uploaded for review. The whole manuscript (up to
+  `RESEARCH_MAX_MANUSCRIPT_CHARS`) is sent to the reviewer with section and paragraph IDs, not
+  retrieved in chunks.
 
 The API can accept other collection labels, but production should use a governed allow-list.
 

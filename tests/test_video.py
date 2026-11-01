@@ -1,13 +1,16 @@
 import math
 import struct
 import wave
+from itertools import pairwise
 from pathlib import Path
 
 import pytest
 from PIL import Image, ImageChops
 
+from app.agents.llm import LLMService
 from app.artifacts.video import (
     VideoScene,
+    _audience_video_package,
     _concatenate_segments,
     _concept_connector_points,
     _constrain_plan_narration,
@@ -27,8 +30,74 @@ from app.artifacts.video import (
     create_teaching_video,
     estimated_video_seconds,
     generate_teaching_video_plan,
+    render_scene_stages,
+    reveal_count,
+    stage_schedule,
 )
 from app.core.config import settings
+
+
+def test_video_planner_receives_only_audience_facing_material() -> None:
+    result = LLMService._mock({"topic": "Cell Structure", "duration_minutes": 60})
+    result["lecture_sections"][0]["content"]["teaching_tip"] = "PRIVATE FACILITATION TIP"
+    result["case_study"]["teaching_notes"] = "PRIVATE CASE GUIDANCE"
+    result["quality_notes"]["review_priorities"] = ["PRIVATE REVIEW PRIORITY"]
+
+    audience_package = _audience_video_package(result)
+    text = str(audience_package)
+    assert "Cell Structure" in text
+    assert "PRIVATE FACILITATION TIP" not in text
+    assert "PRIVATE CASE GUIDANCE" not in text
+    assert "PRIVATE REVIEW PRIORITY" not in text
+    assert "common_errors" in text
+    assert "bloom_level" not in text
+    assert "LO1" not in text
+    assert "minutes" not in text
+    assert all(isinstance(item, str) for item in audience_package["learning_objectives"])
+
+
+def test_video_plan_rejects_teacher_only_storyboard_content() -> None:
+    result = LLMService._mock({"topic": "Cell Structure", "duration_minutes": 60})
+    package = _audience_video_package(result)
+    narration = " ".join(["Cell structure explains how organelles divide work inside cells."] * 6)
+
+    def plan(extra: str) -> dict:
+        return {
+            "title": "Cell Structure explained",
+            "target_duration_seconds": 240,
+            "scenes": [
+                {
+                    "section": "Intro",
+                    "title": "Cell Structure",
+                    "visual_type": visual_type,
+                    "visual_elements": ["Cell", "Structure"],
+                    "bullets": ["Cell structure basics", extra or "Organelles"],
+                    "takeaway": "Cell structure links form and function.",
+                    "narration": narration,
+                }
+                for visual_type in ("title", "concept_map", "comparison", "recap")
+            ],
+        }
+
+    clean = _video_plan_issues(plan(""), minimum_words=50, maximum_words=5000, teaching_package=package)
+    assert not any("teacher-only" in issue for issue in clean)
+    leaked = _video_plan_issues(
+        plan("Teaching tip: LO1 maps to Bloom's level Understand"),
+        minimum_words=50,
+        maximum_words=5000,
+        teaching_package=package,
+    )
+    assert any("teacher-only" in issue for issue in leaked)
+
+    # A lesson whose subject is Bloom's taxonomy may of course mention it.
+    package_about_bloom = {**package, "title": "Bloom's taxonomy in course design"}
+    allowed = _video_plan_issues(
+        plan("Bloom's taxonomy orders thinking skills"),
+        minimum_words=50,
+        maximum_words=5000,
+        teaching_package=package_about_bloom,
+    )
+    assert not any("teacher-only" in issue for issue in allowed)
 
 
 def test_request_video_duration_overrides_defaults(monkeypatch) -> None:
@@ -240,6 +309,7 @@ def test_video_script_uses_strict_schema_and_meets_long_form_budget(monkeypatch)
                     "content": {
                         "explanation": "Models learn from labelled examples.",
                         "key_points": ["Labels guide learning", "Evaluate on unseen data"],
+                        "teaching_tip": "PRIVATE FACILITATION TIP",
                     },
                 },
                 {
@@ -260,6 +330,7 @@ def test_video_script_uses_strict_schema_and_meets_long_form_budget(monkeypatch)
     text_format = captured["text"]["format"]
     assert text_format["type"] == "json_schema"
     assert text_format["strict"] is True
+    assert "PRIVATE FACILITATION TIP" not in captured["input"]
 
 
 def test_multimedia_scene_types_render_different_visual_compositions(tmp_path: Path) -> None:
@@ -544,3 +615,58 @@ def test_elevenlabs_uses_non_pro_mp3_and_converts_to_wav(tmp_path: Path, monkeyp
     assert destination.exists()
     assert not destination.with_suffix(".elevenlabs.mp3").exists()
     assert "pcm_s16le" in captured["arguments"]
+
+
+def test_stage_schedule_spreads_reveals_and_fits_short_scenes() -> None:
+    selected, transitions = stage_schedule(6, 30.0, intro=True)
+    assert selected == list(range(6))
+    assert len(transitions) == len(selected)  # intro + five reveals
+    offsets = [offset for offset, _ in transitions]
+    assert offsets == sorted(offsets)
+    assert all(offset + length <= 30.0 for offset, length in transitions)
+    assert transitions[-1][0] <= 30.0 * 0.7  # the diagram is built while it is explained
+
+    selected, transitions = stage_schedule(8, 3.0, intro=True)
+    assert selected[-1] == 7 and len(selected) < 8
+    assert all(offset + length <= 3.0 for offset, length in transitions)
+
+
+def test_scene_stages_build_the_diagram_one_element_at_a_time(tmp_path: Path) -> None:
+    scene = VideoScene(
+        section="HOW IT WORKS",
+        title="The water cycle",
+        bullets=("Heat", "Cooling"),
+        narration="Narration.",
+        visual_type="cycle",
+        visual_elements=("Evaporation", "Condensation", "Rain", "Collection"),
+        takeaway="Water keeps moving in a loop.",
+    )
+    stages = render_scene_stages(scene, tmp_path, index=2, total=5)
+    assert len(stages) == reveal_count(scene) + 2 == 6
+    images = [Image.open(path).convert("RGB") for path in stages]
+    for before, after in pairwise(images):
+        assert ImageChops.difference(before, after).getbbox() is not None
+
+
+def test_animated_segment_keeps_exact_duration(tmp_path: Path) -> None:
+    ffmpeg = _ffmpeg_executable()
+    previous = tmp_path / "previous.png"
+    _render_scene_frame(
+        VideoScene("OPENING", "Start here", ("a", "b"), "n", "title", ("One", "Two"), "Go."),
+        previous, index=1, total=2,
+    )
+    scene = VideoScene(
+        "PROCESS", "Follow the steps", ("a", "b"), "n", "process", ("Plan", "Do", "Check"),
+        "Steps build on each other.",
+    )
+    stages = render_scene_stages(scene, tmp_path, index=2, total=2)
+    audio = tmp_path / "audio.wav"
+    with wave.open(str(audio), "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(22_050)
+        handle.writeframes(b"\x00\x00" * 22_050 * 4)
+    output = tmp_path / "segment.mp4"
+    _render_segment(ffmpeg, stages[-1], audio, output, 5.0, scene_index=2, stages=stages,
+                    previous_frame=previous, is_last=True, visual_type="process")
+    assert abs(_media_duration(ffmpeg, output) - 5.0) < 0.15

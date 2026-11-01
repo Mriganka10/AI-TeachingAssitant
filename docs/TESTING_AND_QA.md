@@ -14,7 +14,19 @@ Current integration tests cover:
 - authenticated user endpoint
 - source upload
 - teaching agent in mock mode
-- research agent in mock mode
+- research endpoint requires an uploaded manuscript; unknown agent types fail cleanly
+- research review end to end in mock mode: upload, review, revision, six artifacts, job list
+- manuscript parsing from PDF and DOCX (title, sections, references, running headers removed)
+- review contract checks (unknown locations, inconsistent decisions)
+- revision integrity checks (lost or invented citations and numbers, author placeholders)
+- failed revisions keep the original text; padded or unsupported added sections are dropped
+- new references: Crossref and arXiv parsing, invented or mismatched DOIs rejected, registry
+  metadata used, duplicates and already-cited works skipped, IEEE and APA formatting
+- revision plan normalisation and heading renumbering; citations in numeric and author-year
+  styles; numbered reference lists never reordered
+- invented numbers caught and repaired; tables and keywords in clean and tracked exports
+- tracked-changes DOCX contains real Word revisions with unique IDs
+- research exports carry no tool names or AI labels in text or metadata
 - expected artifact formats
 - async job polling endpoint
 - failed async job behavior
@@ -25,18 +37,17 @@ Current integration tests cover:
 1. Open the login page.
 2. Enter an institutional email.
 3. Request and verify local OTP.
-4. Confirm professor-specific dashboard text and metrics.
-5. Upload one source into each relevant collection.
-6. Open Teaching Assistant.
-7. Generate a mock or live lecture package.
-8. Confirm the UI shows queued/running status rather than blocking indefinitely.
-9. Download JSON, DOCX, PDF, and PPTX.
-10. Open Research Paper Assistant.
-11. Generate a research synthesis.
-12. Confirm the UI polls until the job is completed.
-13. Download JSON, DOCX, PDF, and PPTX.
-14. Confirm recent activity and readiness metrics update.
-15. Sign out and verify protected endpoints reject the old session.
+4. Confirm the home page greeting, lesson counts and setup checklist.
+5. Upload one file into each collection under Course materials (try drag and drop too).
+6. Open New lesson; check the length quick-picks, level selector and video toggle.
+7. Create a mock or live lesson.
+8. Confirm the progress tracker moves through writing, building files (and video) to ready.
+9. Download the teacher's guide (DOCX, PDF) and student slides (PPTX).
+10. Refresh the lesson page and confirm it reloads the same lesson.
+11. Open My lessons and reopen the lesson.
+12. Confirm the home counts and recent lessons update.
+13. Check the layout at phone width.
+14. Sign out and verify protected endpoints reject the old session.
 
 ## Live OpenAI Acceptance Test
 
@@ -61,13 +72,6 @@ Never put the API key in test fixtures or screenshots.
 - DOCX and PDF include all major sections.
 - filenames are safe and bounded.
 
-### Research
-
-- themes and methodology comparison are readable.
-- references are clearly separated.
-- research gaps are framed as evidence-based claims.
-- all cited references are manually verified.
-
 ## Security QA
 
 - Cross-tenant artifact ID returns 404.
@@ -85,7 +89,7 @@ Never put the API key in test fixtures or screenshots.
 - [ ] Tests pass.
 - [ ] Local UI flow passes.
 - [ ] Live OpenAI smoke test passes.
-- [ ] PDF and PPTX text stays on the requested topic for both assistants; video scene titles,
+- [ ] PDF and PPTX text stays on the requested topic; video scene titles,
       visuals, and narration follow the validated teaching package.
 - [ ] Documentation commands match the repository.
 - [ ] No secrets are staged.

@@ -1,12 +1,37 @@
 # Professor AI Workspace
 
-A deployable, multi-tenant baseline for two professor-facing agents:
+A deployable, multi-tenant workspace for professors with two assistants.
 
-1. **AI Teaching Assistant** — creates lecture structure, PPTX, optional multimedia MP4, notes, MCQs, assignments,
-   numerical problems, Bloom's taxonomy mapping, case discussions, and viva questions.
-2. **Research Paper Assistant** — synthesizes uploaded papers into a literature review,
-   methodology comparison, research gaps, research questions, future scope, methodology
-   suggestions, and APA-style references.
+**AI Teaching Assistant.** From one topic and the professor's own course materials it prepares a
+complete lesson:
+
+- **Teacher's guide** (DOCX and PDF): session plan with timings, teaching notes, answer keys,
+  model answers, Bloom's mapping, assignments with rubrics, and a "Before You Teach" checklist.
+- **Student slides** (PPTX): native, editable PowerPoint with a diagram for every section,
+  drawn icons, worked examples, knowledge checks with answer slides, transitions and animations.
+- **Optional narrated video** (MP4): diagrams build up step by step while the lesson is explained,
+  with captions, optional illustrations (Gemini), optional Manim animations for maths and
+  science scenes, and optional short Veo motion clips for picture scenes.
+
+**Research Paper Assistant.** From one uploaded manuscript (PDF or Word) it prepares:
+
+- **Review report** (DOCX and PDF): a peer-review style report with a recommendation, a scored
+  assessment on six to eight criteria, strengths, major and minor issues pinned to exact sections
+  and paragraphs, a check of the central claims against the evidence, methodology, statistics and
+  reproducibility checks, a reporting-guideline checklist (CONSORT, PRISMA, STROBE and others),
+  research gaps, literature positioning against the professor's own research library (and,
+  optionally, recent web sources), title and abstract advice, venue fit, a prioritised revision
+  plan and questions for the authors.
+- **Revised paper** (DOCX and PDF, plus a Word copy with tracked changes): a journal-style
+  revision planned from the review. Sections are rewritten in a scholarly register or expanded,
+  missing sections (related work, limitations, open challenges) are added, comparison tables are
+  built, and recent literature is cited, but only references confirmed in Crossref or arXiv, in the
+  paper's own citation style. Every original citation and number is kept exactly and no result is
+  invented. Where a fix needs the author's own data, a highlighted `[Author: ...]` note marks the
+  place.
+
+Content is written in plain, natural language, and exported files carry no tool or AI markers in
+their text or metadata.
 
 ## Documentation
 
@@ -62,7 +87,8 @@ in the UI. Use `LLM_SERVICE_MODE=mock` to test without calling OpenAI.
 
 - `POST /api/auth/request-otp`, `POST /api/auth/verify`, `POST /api/auth/logout`
 - `POST /api/documents`, `GET /api/documents`
-- `POST /api/agents/teaching`, `POST /api/agents/research` — enqueue agent jobs
+- `POST /api/agents/teaching` — enqueue a lesson job
+- `POST /api/agents/research` — enqueue a manuscript review (upload the paper first)
 - `GET /api/jobs`, `GET /api/jobs/{job_id}`, `GET /api/artifacts/{id}`
 - `GET /health`
 

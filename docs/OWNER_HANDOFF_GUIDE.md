@@ -9,7 +9,7 @@ This guide helps the owner review, demonstrate, deploy, and assign future work f
 1. `README.md` — quick overview and commands
 2. `docs/PROJECT_BRIEF.md` — product purpose and boundaries
 3. `docs/ARCHITECTURE.md` — technical design
-4. `docs/AGENTS.md` — Teaching and Research workflows
+4. `docs/AGENTS.md` — Teaching Assistant workflow
 5. `docs/MODELS_AND_AGENTS.md` — OpenAI and deterministic techniques
 6. `docs/RAG_DESIGN.md` — knowledge-library behavior and future vector design
 7. `docs/API.md` — endpoint reference
@@ -27,9 +27,10 @@ This guide helps the owner review, demonstrate, deploy, and assign future work f
 
 Use this explanation:
 
-> Professor AI is a FastAPI application with email OTP login and two explicit specialist
-> assistants. A professor uploads tenant-scoped academic sources, selects Teaching or Research,
-> and submits a controlled request. The application queues a tenant-scoped agent job, retrieves
+> Professor AI is a FastAPI application with email OTP login and two specialist agents, the AI
+> Teaching Assistant and the Research Paper Assistant. A professor uploads tenant-scoped course
+> materials and describes a lesson, or uploads a manuscript for review, and submits a controlled
+> request. The application queues a tenant-scoped agent job, retrieves
 > bounded excerpts from the professor's library, optionally uses OpenAI web search, requires
 > structured JSON output, generates academic artifacts, stores metadata and audit events in SQL,
 > and persists files locally or in encrypted S3.
@@ -57,17 +58,15 @@ Open `http://127.0.0.1:8000`.
 
 1. Show the professional professor login.
 2. Request the local OTP.
-3. Show the faculty dashboard and two assistants.
-4. Upload a previous note or research paper.
-5. Generate a lecture package.
-6. Point out the queued/running job status while the agent works.
-7. Download JSON, DOCX, PDF, and PPTX.
-8. Generate a research synthesis.
-9. Show research gaps and methodology comparison.
-10. Download JSON, DOCX, PDF, and PPTX.
-11. Show recent activity and source counts.
-12. Explain tenant isolation, audit tables, S3, and AWS deployment.
-13. State clearly that professors review all generated material.
+3. Show the home page: greeting, lesson counts, recent lessons and the setup checklist.
+4. Upload a lecture note under Course materials.
+5. Create a lesson (turn on the video to show the full flow).
+6. Point out the progress tracker while the lesson is written and the files are built.
+7. Download the teacher's guide (DOCX, PDF) and the student slides (PPTX, plus MP4 if requested).
+8. Open the slides in PowerPoint to show diagrams, transitions and animations.
+9. Reopen the lesson from My lessons to show files can be downloaded again.
+10. Explain tenant isolation, audit tables, S3, and AWS deployment.
+11. State clearly that professors review all generated material.
 
 ## Owner Decisions Needed Before Production
 
@@ -80,7 +79,7 @@ Open `http://127.0.0.1:8000`.
 - data-processing and copyright policy
 - approved OpenAI model and budget
 - whether current web search is allowed
-- research-paper license and privacy constraints
+- licensing and privacy constraints for uploaded books and course materials
 - queue/worker autoscaling thresholds and per-tenant usage budgets
 
 ## Current Production Gaps

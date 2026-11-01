@@ -41,6 +41,27 @@ class Settings(BaseSettings):
     elevenlabs_output_format: str = "mp3_44100_128"
     elevenlabs_stability: float = 0.55
     elevenlabs_similarity_boost: float = 0.78
+    # Phase 1 video quality: reviewer pass, illustrations, captions. Each can be switched off.
+    video_script_review_enabled: bool = True
+    video_illustrations_enabled: bool = True
+    video_max_illustrations: int = 8
+    video_captions_enabled: bool = True
+    gemini_api_key: str | None = None
+    gemini_image_model: str = "gemini-2.5-flash-image"
+    gemini_image_timeout_seconds: int = 90
+    # Phase 2: Manim animations for STEM scenes (needs `pip install .[animations]`).
+    video_animations_enabled: bool = True
+    video_max_animations: int = 4
+    video_animation_render_timeout_seconds: int = 180
+    video_animation_repair_attempts: int = 1
+    # Phase 3: short Veo motion clips for picture scenes (uses GEMINI_API_KEY; billed per second).
+    video_cinematic_clips: bool = False
+    video_max_cinematic_clips: int = 2
+    video_cinematic_seconds: int = 8
+    veo_model: str = "veo-3.1-lite-generate-preview"
+    veo_resolution: str = "720p"
+    veo_timeout_seconds: int = 420
+    veo_poll_interval_seconds: int = 10
 
     auth_enabled: bool = True
     otp_dev_mode: bool = True
@@ -65,6 +86,18 @@ class Settings(BaseSettings):
     aws_region: str = "ap-south-1"
     max_upload_mb: int = 50
     max_context_chars: int = 120_000
+    # Research assistant: manuscript size and section-revision limits.
+    research_max_manuscript_chars: int = 220_000
+    research_related_context_chars: int = 40_000
+    research_revision_workers: int = 4
+    research_revision_max_words: int = 1_600
+    # Depth of the review and revision calls (low, medium, high).
+    research_reasoning_effort: str = "medium"
+    # Verified literature added to revisions (needs web search on the request).
+    research_max_new_sources: int = 12
+    research_max_new_sections: int = 4
+    research_source_timeout_seconds: int = 15
+    research_contact_email: str = ""  # optional; identifies requests to Crossref's polite pool
     agent_execution_backend: str = "background"
     agent_queue_url: str | None = None
     agent_queue_wait_seconds: int = 20

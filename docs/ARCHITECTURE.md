@@ -41,9 +41,14 @@ Tenant-Scoped Application Services
 | Authentication | `app/core/auth.py` | OTP creation, verification, sessions, cookies, SMTP delivery. |
 | Retrieval | `app/agents/retrieval.py` | Tenant and collection filtering plus lexical ranking. |
 | LLM service | `app/agents/llm.py` | OpenAI Responses API, optional web search, mock mode, JSON parsing. |
-| Agent prompts | `app/agents/prompts.py` | Teaching and research output contracts. |
-| Artifact generator | `app/artifacts/generator.py` | Professor-ready JSON, DOCX, PDF, and PPTX creation with headings, tables, assessment sections, evidence callouts, and references. |
-| Video generator | `app/artifacts/video.py` | Optional content-grounded storyboard, multiple visual scene types, provider-selectable AI narration, animated transitions, and bounded MP4 rendering. |
+| Agent prompts | `app/agents/prompts.py` | Teaching prompt with plain-language rules; reviewer and editor prompts for the research assistant. |
+| Output contract | `app/agents/contracts.py` | Strict teaching, manuscript-review and section-revision schemas with semantic validation. |
+| Manuscript handling | `app/agents/manuscript.py` | Paper structure (sections, paragraph IDs), location labels, parallel section revision with citation and number integrity checks. |
+| Plain language | `app/agents/plain_language.py` | Style checks for one rewrite and safe wording fixes. |
+| Artifact generator | `app/artifacts/generator.py` | JSON plus the teacher's guide (DOCX and PDF) with session plan, answer keys, assessment sections and references; neutral file metadata. |
+| Student slides | `app/artifacts/slides.py` | Native PowerPoint deck: diagrams, drawn icons, transitions and entrance animations. |
+| Research exports | `app/artifacts/research_docs.py` | Review report (DOCX, PDF), revised manuscript (DOCX, PDF) and tracked-changes DOCX with neutral metadata. |
+| Video generator | `app/artifacts/video.py` | Optional content-grounded storyboard, multiple visual scene types, provider-selectable narration, step-by-step diagram build-up, animated scene transitions, and bounded MP4 rendering. |
 | Storage | `app/core/storage.py` | Local persistence or encrypted S3 upload/download. |
 | Faculty UI | `app/static/` | Login, dashboard, agent workbenches, library, and output viewer. |
 

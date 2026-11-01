@@ -74,7 +74,9 @@ Content-Type: multipart/form-data
 
 Fields:
 
-- `collection`: `research_papers`, `previous_notes`, `books`, or `case_studies`
+- `collection`: `previous_notes` (lecture notes), `books` or `case_studies` (read by the Teaching
+  Assistant); `research_papers` (related literature for paper reviews); or `manuscripts` (papers to
+  review).
 - `file`: PDF, DOCX, TXT, MD, or CSV
 
 Example:
@@ -82,8 +84,8 @@ Example:
 ```bash
 curl -X POST http://127.0.0.1:8000/api/documents \
   -b cookies.txt \
-  -F "collection=research_papers" \
-  -F "file=@paper.pdf"
+  -F "collection=previous_notes" \
+  -F "file=@week3-notes.pdf"
 ```
 
 Maximum size defaults to 50 MB and is configured by `MAX_UPLOAD_MB`.
@@ -94,7 +96,8 @@ Maximum size defaults to 50 MB and is configured by `MAX_UPLOAD_MB`.
 GET /api/documents
 ```
 
-Only documents for the signed-in tenant are returned.
+Only documents for the signed-in tenant are returned. Each item has `id`, `filename`,
+`collection`, `size_bytes`, `status` and `uploaded_at`.
 
 ## Teaching Assistant
 
@@ -151,16 +154,35 @@ Content-Type: application/json
 
 ```json
 {
-  "research_topic": "Responsible AI adoption in higher education",
-  "discipline": "Information Systems",
-  "use_web_search": true,
+  "manuscript_document_id": "id returned by POST /api/documents",
+  "discipline": "Educational psychology",
+  "paper_type": "auto",
+  "target_venue": "Computers & Education",
+  "author_name": "Dr A. Sen",
+  "generate_revision": true,
+  "use_web_search": false,
   "collections": ["research_papers"],
-  "instructions": "Focus on longitudinal evidence"
+  "instructions": "Is the methodology strong enough for a Q1 journal?"
 }
 ```
 
-The response follows the same async job contract as the Teaching Assistant. The generated research
-job produces structured JSON plus DOCX, PDF, and PPTX artifacts.
+- `manuscript_document_id` (required): an uploaded document of the same tenant with readable
+  text. Unknown IDs return 404; documents without text return 422.
+- `paper_type`: `auto`, `empirical`, `review`, `theoretical`, `methods`, `case_study` or `other`.
+- `author_name`: written into the document properties of the exported files and used as the
+  author of the tracked changes. Leave blank for blank metadata.
+- `generate_revision`: when false, only the review report is produced.
+- `collections`: where related literature is retrieved from; the manuscript itself is excluded.
+
+A completed review job has these artifacts: `<title>-review.json`, `<title>-review.docx`,
+`<title>-review.pdf` and, with a revision, `<title>-revised.docx`, `<title>-revised.pdf` and
+`<title>-revised-tracked-changes.docx`. `result` holds the review, the request summary, the parsed
+manuscript (`manuscript`) and the revision: `revision.sections[]` (with `heading`,
+`original_heading`, `level`, `action` keep/revise/expand/add, `status`, `original`, `revised`,
+`tables`, `changes` and `author_notes`), `revision.keywords`, `revision.new_references` (verified,
+with DOI or arXiv ID) and `revision.dropped_sections`. Set `use_web_search` to true to allow
+verified new references. If some sections had to keep their original text, the job
+is `completed` with a `warning` naming them.
 
 ## Jobs
 
@@ -168,8 +190,9 @@ job produces structured JSON plus DOCX, PDF, and PPTX artifacts.
 GET /api/jobs
 ```
 
-Returns up to 50 recent tenant-scoped jobs with status, model, title, course/discipline, and start
-time.
+Returns up to 50 recent tenant-scoped jobs (lessons and paper reviews) with `agent_type`, status,
+model, title (the lesson topic, or the manuscript title once reviewed), course or target venue,
+and start time. `GET /api/jobs/{job_id}` also returns `agent_type`.
 
 ### Job Detail / Polling
 
@@ -195,16 +218,25 @@ Completed job:
 {
   "job_id": "uuid",
   "status": "completed",
+  "request": {"topic": "Time value of money", "duration_minutes": 60, "generate_video": false},
+  "started_at": "2026-10-31T02:30:00Z",
+  "completed_at": "2026-10-31T02:33:10Z",
   "result": {"title": "Time value of money"},
   "error": null,
+  "warning": null,
   "artifacts": [
-    {"id": "uuid", "filename": "time-value-of-money.json", "type": "json"},
-    {"id": "uuid", "filename": "time-value-of-money.docx", "type": "docx"},
-    {"id": "uuid", "filename": "time-value-of-money.pdf", "type": "pdf"},
-    {"id": "uuid", "filename": "time-value-of-money.pptx", "type": "pptx"}
+    {"id": "uuid", "filename": "time-value-of-money.json", "type": "json", "size_bytes": 18234},
+    {"id": "uuid", "filename": "time-value-of-money.docx", "type": "docx", "size_bytes": 40211},
+    {"id": "uuid", "filename": "time-value-of-money.pdf", "type": "pdf", "size_bytes": 51877},
+    {"id": "uuid", "filename": "time-value-of-money.pptx", "type": "pptx", "size_bytes": 102400}
   ]
 }
 ```
+
+`request` is the original lesson request (the UI uses it to show whether a video was asked for).
+Status moves through `running` → `content_ready` → (`documents_ready` when a video was requested)
+→ `completed`, or ends in `failed` / `artifact_failed`. DOCX and PDF are the teacher's guide; PPTX
+and MP4 are for students.
 
 Failed job:
 

@@ -3,733 +3,486 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Professor AI Workspace</title>
-  <link rel="stylesheet" href="/static/styles.css?v=20261012-user-video-duration">
+  <title>Professor AI · Teaching and Research Workspace</title>
+  <link rel="stylesheet" href="/static/styles.css?v=20261101-research">
 </head>
 <body>
+  <!-- Sign in ---------------------------------------------------------------------------- -->
   <section id="login" class="auth-shell">
     <div class="auth-brand">
-      <div class="brand-mark" aria-hidden="true">
-        <span></span><span></span><span></span>
+      <div class="brand-row">
+        <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+        <strong>Professor AI</strong>
       </div>
 
       <div class="auth-brand-copy">
-        <span class="overline overline-light">FACULTY INTELLIGENCE PLATFORM</span>
-        <h1>More time for<br><em>ideas that matter.</em></h1>
+        <span class="overline overline-light">TEACHING AND RESEARCH WORKSPACE</span>
+        <h1>Prepare a full lesson<br><em>in one sitting.</em></h1>
         <p>
-          AI colleagues for teaching, research, and academic work—grounded in
-          your own knowledge.
+          Describe what you are teaching. Get a teacher's guide with answer keys, student slides
+          with clear diagrams, and an optional narrated video, all grounded in your own course
+          material. Upload a research paper to get a detailed review and a revised version.
         </p>
       </div>
 
-      <div class="auth-proof">
-        <div class="proof-item">
-          <strong>2</strong>
-          <span>Specialist<br>AI agents</span>
-        </div>
+      <ul class="auth-proof" aria-label="What the workspace prepares">
+        <li><span class="proof-icon">▤</span><div><strong>Teacher's guide</strong><small>Word and PDF, with answer keys</small></div></li>
+        <li><span class="proof-icon">◫</span><div><strong>Student slides</strong><small>Diagrams and animations</small></div></li>
+        <li><span class="proof-icon">▷</span><div><strong>Explainer video</strong><small>Narrated, step by step</small></div></li>
+        <li><span class="proof-icon">✎</span><div><strong>Paper review</strong><small>Report and revised paper</small></div></li>
+      </ul>
 
-        <div class="proof-item">
-          <strong>1</strong>
-          <span>Secure faculty<br>workspace</span>
-        </div>
-
-        <div class="proof-item">
-          <strong>24/7</strong>
-          <span>Academic<br>assistance</span>
-        </div>
-      </div>
-
-      <p class="auth-footnote">
-        Designed for universities, business schools, and research institutions.
-      </p>
+      <p class="auth-footnote">Built for universities, colleges and schools.</p>
     </div>
 
     <div class="auth-panel">
       <div class="auth-card">
         <div class="mobile-brand">
-          <div class="brand-mark small">
-            <span></span><span></span><span></span>
-          </div>
+          <div class="brand-mark small"><span></span><span></span><span></span></div>
           <strong>Professor AI</strong>
         </div>
 
         <span id="auth-eyebrow" class="overline">SECURE FACULTY ACCESS</span>
         <h2 id="auth-title">Welcome back</h2>
-
         <p id="auth-intro" class="auth-intro">
-          Sign in with your institutional email. We’ll send a secure one-time
-          code—no password required.
+          Sign in with your institutional email. We'll send you a one-time code, so there is no
+          password to remember.
         </p>
 
         <form id="otp-request" class="auth-form">
           <label for="email">Institutional email</label>
-
           <div class="input-wrap">
-            <svg aria-hidden="true" viewBox="0 0 24 24">
-              <path d="M4 6h16v12H4zM4 7l8 6 8-6"></path>
-            </svg>
-
-            <input
-              id="email"
-              type="email"
-              autocomplete="email"
-              placeholder="professor@university.edu"
-              required
-            >
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 6h16v12H4zM4 7l8 6 8-6"></path></svg>
+            <input id="email" type="email" autocomplete="email" placeholder="professor@university.edu" required>
           </div>
-
-          <button class="primary-button" type="submit">
-            <span>Continue with email</span>
-            <span aria-hidden="true">→</span>
-          </button>
-
-          <a id="open-register" class="text-button register-button" href="/register">
-            New user? Verify your email first
-          </a>
+          <button class="primary-button" type="submit"><span>Continue with email</span><span aria-hidden="true">→</span></button>
+          <a id="open-register" class="text-button register-button" href="/register">New here? Verify your email first</a>
         </form>
 
         <form id="email-register" class="auth-form hidden">
           <label for="register-email-input">Email address</label>
-
           <div class="input-wrap">
-            <svg aria-hidden="true" viewBox="0 0 24 24">
-              <path d="M4 6h16v12H4zM4 7l8 6 8-6"></path>
-            </svg>
-
-            <input
-              id="register-email-input"
-              type="email"
-              autocomplete="email"
-              placeholder="professor@university.edu"
-              required
-            >
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 6h16v12H4zM4 7l8 6 8-6"></path></svg>
+            <input id="register-email-input" type="email" autocomplete="email" placeholder="professor@university.edu" required>
           </div>
-
-          <button class="primary-button" type="submit">
-            <span>Send verification link</span>
-            <span aria-hidden="true">→</span>
-          </button>
-
+          <button class="primary-button" type="submit"><span>Send verification link</span><span aria-hidden="true">→</span></button>
           <p class="auth-help">
-            AWS SES will send a one-time verification email. Click that email
-            link, then return to login and request your OTP.
+            We'll email you a one-time verification link. Open it, then come back here to request
+            your sign-in code.
           </p>
-
-          <a id="back-to-login" class="text-button register-button" href="/login">
-            Already verified? Back to login
-          </a>
+          <a id="back-to-login" class="text-button register-button" href="/login">Already verified? Back to sign in</a>
         </form>
 
         <form id="otp-verify" class="auth-form hidden">
           <div class="otp-heading">
             <div>
-              <label for="otp">Enter verification code</label>
+              <label for="otp">Enter your code</label>
               <small id="otp-destination"></small>
             </div>
-
-            <button id="change-email" class="text-button" type="button">
-              Change email
-            </button>
+            <button id="change-email" class="text-button" type="button">Change email</button>
           </div>
-
-          <input
-            id="otp"
-            class="otp-input"
-            inputmode="numeric"
-            autocomplete="one-time-code"
-            maxlength="6"
-            placeholder="••••••"
-            required
-          >
-
-          <button class="primary-button" type="submit">
-            <span>Enter workspace</span>
-            <span aria-hidden="true">→</span>
-          </button>
+          <input id="otp" class="otp-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••" required>
+          <button class="primary-button" type="submit"><span>Enter workspace</span><span aria-hidden="true">→</span></button>
         </form>
 
         <p id="auth-message" class="auth-message" role="status"></p>
 
         <div class="trust-note">
-          <svg aria-hidden="true" viewBox="0 0 24 24">
-            <path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"></path>
-          </svg>
-
-          <span>
-            Your workspace is private, encrypted, and isolated from other
-            institutions.
-          </span>
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"></path></svg>
+          <span>Your workspace is private, encrypted, and kept separate from other institutions.</span>
         </div>
       </div>
-
-      <p class="legal">
-        By continuing, you agree to the platform terms and privacy policy.
-      </p>
+      <p class="legal">By continuing, you agree to the platform terms and privacy policy.</p>
     </div>
   </section>
 
+  <!-- Workspace ------------------------------------------------------------------------- -->
   <section id="workspace" class="app-shell hidden">
     <aside class="sidebar">
       <div class="sidebar-brand">
-        <div class="brand-mark small">
-          <span></span><span></span><span></span>
-        </div>
-
-        <div>
-          <strong>Professor AI</strong>
-          <small>Faculty Workspace</small>
-        </div>
+        <div class="brand-mark small"><span></span><span></span><span></span></div>
+        <div><strong>Professor AI</strong><small>Teaching and research</small></div>
       </div>
 
+      <button class="new-lesson-button" data-go="create"><span>+</span> New lesson</button>
+      <button class="new-review-button" data-go="review"><span>+</span> Review a paper</button>
+
       <nav aria-label="Workspace navigation">
-        <button class="nav-item active" data-view="home">
-          <span class="nav-icon">⌂</span>
-          <span>Home</span>
-        </button>
-
-        <button class="nav-item" data-agent-target="teaching">
-          <span class="nav-icon">✦</span>
-          <span>Teaching Assistant</span>
-        </button>
-
-        <button class="nav-item" data-agent-target="research">
-          <span class="nav-icon">⌁</span>
-          <span>Research Assistant</span>
-        </button>
-
-        <button class="nav-item" data-scroll-target="library">
-          <span class="nav-icon">▤</span>
-          <span>Knowledge Library</span>
-        </button>
+        <button class="nav-item" data-go="home"><span class="nav-icon">⌂</span><span>Home</span></button>
+        <button class="nav-item" data-go="lessons"><span class="nav-icon">▤</span><span>My lessons</span></button>
+        <button class="nav-item" data-go="reviews"><span class="nav-icon">✎</span><span>Paper reviews</span></button>
+        <button class="nav-item" data-go="materials"><span class="nav-icon">◧</span><span>Uploaded files</span></button>
       </nav>
 
       <div class="sidebar-spacer"></div>
 
       <div class="system-card">
         <span class="system-dot"></span>
-
-        <div>
-          <strong>Systems operational</strong>
-          <small>OpenAI + RAG connected</small>
-        </div>
+        <div><strong>Workspace ready</strong><small>Private to your institution</small></div>
       </div>
 
-      <button id="logout" class="nav-item logout-button">
-        <span class="nav-icon">↗</span>
-        <span>Sign out</span>
-      </button>
+      <button id="logout" class="nav-item logout-button"><span class="nav-icon">↗</span><span>Sign out</span></button>
     </aside>
 
     <div class="app-content">
       <header class="topbar">
-        <button id="mobile-menu" class="icon-button" aria-label="Open menu">
-          ☰
-        </button>
-
-        <div class="breadcrumb">
-          <span>Workspace</span>
-          <b>/</b>
-          <strong>Home</strong>
-        </div>
-
+        <button id="mobile-menu" class="icon-button" aria-label="Open menu">☰</button>
+        <div class="breadcrumb"><span>Workspace</span><b>/</b><strong id="crumb">Home</strong></div>
         <div class="user-menu">
           <div class="user-avatar" id="user-avatar">P</div>
-
-          <div>
-            <strong id="user-name">Professor</strong>
-            <small id="user-email">Faculty account</small>
-          </div>
+          <div><strong id="user-name">Professor</strong><small id="user-email">Faculty account</small></div>
         </div>
       </header>
 
       <main class="dashboard">
-        <section class="welcome-block">
-          <div class="welcome-content">
-            <span class="overline overline-light">
-              YOUR ACADEMIC COMMAND CENTRE
-            </span>
-
-            <h2 id="welcome">Good morning, Professor.</h2>
-
-            <p>
-              Prepare lectures, strengthen course material, and move research
-              forward—with your academic judgement always in control.
-            </p>
-
-            <div class="hero-actions">
-              <button class="hero-primary" data-agent-target="teaching">
-                <span>✦</span>
-                Prepare a lecture
-              </button>
-
-              <button class="hero-secondary" data-agent-target="research">
-                <span>⌁</span>
-                Analyse research
-              </button>
-            </div>
-          </div>
-
-          <div class="hero-aside">
-            <div class="date-card">
-              <span id="today-day">22</span>
-
-              <div>
-                <strong id="today-month">JUN</strong>
-                <small id="today-year">2026</small>
+        <!-- Home -->
+        <section class="page" data-page="home">
+          <div class="hero">
+            <div class="hero-copy">
+              <span class="overline overline-light" id="today-label">TODAY</span>
+              <h2 id="welcome">Good morning, Professor.</h2>
+              <p>Prepare a complete, ready-to-teach lesson, or get a detailed review and a revised version of a research paper.</p>
+              <div class="hero-actions">
+                <button class="hero-primary" data-go="create"><span>+</span> Create a lesson</button>
+                <button class="hero-secondary" data-go="review">Review a paper</button>
               </div>
             </div>
-
-            <div class="focus-note">
-              <span>FACULTY TIP</span>
-              <p>
-                Upload your trusted notes and papers first for outputs grounded
-                in your own material.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        <section class="workspace-stats" aria-label="Workspace overview">
-          <article class="stat-card">
-            <div class="stat-icon stat-blue">✦</div>
-
-            <div>
-              <span>Faculty tasks</span>
-              <strong id="stat-runs">0</strong>
-              <small id="stat-completed">No completed work yet</small>
-            </div>
-          </article>
-
-          <article class="stat-card">
-            <div class="stat-icon stat-cyan">▤</div>
-
-            <div>
-              <span>Academic sources</span>
-              <strong id="stat-documents">0</strong>
-              <small>Papers, notes, books and cases</small>
-            </div>
-          </article>
-
-          <article class="stat-card">
-            <div class="stat-icon stat-purple">◈</div>
-
-            <div>
-              <span>Faculty assistants</span>
-              <strong>2</strong>
-              <small>Teaching and research specialists</small>
-            </div>
-          </article>
-
-          <article class="stat-card">
-            <div class="stat-icon stat-green">✓</div>
-
-            <div>
-              <span>Faculty workspace</span>
-              <strong class="status-word">Ready</strong>
-              <small>Private to your institution</small>
-            </div>
-          </article>
-        </section>
-
-        <section class="section-heading">
-          <div>
-            <span class="overline">SPECIALIST AGENTS</span>
-            <h3>What would you like to work on?</h3>
+            <ol class="hero-steps" aria-label="How it works">
+              <li><b>1</b><div><strong>Add your materials</strong><small>Notes, textbooks, case studies</small></div></li>
+              <li><b>2</b><div><strong>Describe the lesson</strong><small>Topic, class, length, level</small></div></li>
+              <li><b>3</b><div><strong>Download and teach</strong><small>Guide, slides and video</small></div></li>
+            </ol>
           </div>
 
-          <span class="agent-count">2 agents available</span>
-        </section>
+          <div class="stats" aria-label="Workspace overview">
+            <article class="stat"><span>Lessons created</span><strong id="stat-lessons">0</strong></article>
+            <article class="stat"><span>Papers reviewed</span><strong id="stat-reviews">0</strong></article>
+            <article class="stat"><span>Ready to download</span><strong id="stat-ready">0</strong></article>
+            <article class="stat"><span>Uploaded files</span><strong id="stat-documents">0</strong></article>
+          </div>
 
-        <div class="agent-catalog">
-          <article class="agent-card teaching-card">
-            <div class="agent-card-top">
-              <div class="agent-symbol teaching-symbol">✦</div>
-              <span class="agent-state"><i></i> Ready</span>
-            </div>
-
-            <div class="agent-label">TEACHING & CURRICULUM</div>
-            <h4>AI Teaching Assistant</h4>
-
-            <p>
-              Build a complete, evidence-aware teaching package from one topic
-              and your own materials.
-            </p>
-
-            <div class="capability-list">
-              <span>Lecture decks</span>
-              <span>Notes</span>
-              <span>Explainer videos</span>
-              <span>MCQs</span>
-              <span>Assignments</span>
-              <span>Bloom mapping</span>
-              <span>Viva</span>
-            </div>
-
-            <button class="agent-launch" data-agent-target="teaching">
-              <span>Start preparing a lecture</span>
-              <span>→</span>
-            </button>
-          </article>
-
-          <article class="agent-card research-card">
-            <div class="agent-card-top">
-              <div class="agent-symbol research-symbol">⌁</div>
-              <span class="agent-state"><i></i> Ready</span>
-            </div>
-
-            <div class="agent-label">RESEARCH & SYNTHESIS</div>
-            <h4>Research Paper Assistant</h4>
-
-            <p>
-              Read across your paper library and surface themes, methods, gaps,
-              and defensible next questions.
-            </p>
-
-            <div class="capability-list">
-              <span>Literature review</span>
-              <span>Research gaps</span>
-              <span>Methods</span>
-              <span>APA references</span>
-              <span>Future scope</span>
-            </div>
-
-            <button class="agent-launch" data-agent-target="research">
-              <span>Start a research synthesis</span>
-              <span>→</span>
-            </button>
-          </article>
-        </div>
-
-        <section class="home-insights">
-          <article class="insight-card activity-card">
-            <div class="insight-heading">
-              <div>
-                <span class="overline">RECENT FACULTY WORK</span>
-                <h3>Lectures and research in progress</h3>
+          <div class="home-grid">
+            <article class="panel">
+              <div class="panel-head">
+                <h3>Recent work</h3>
+                <button class="text-button" data-go="lessons">View lessons</button>
               </div>
+              <div id="recent-lessons" class="lesson-rows"></div>
+            </article>
 
-              <span class="live-label"><i></i> Live</span>
+            <article class="panel">
+              <div class="panel-head"><h3>Getting started</h3><span id="setup-score" class="score">1 of 3</span></div>
+              <ul class="setup-list">
+                <li class="done"><span class="tick">✓</span>Sign in to your workspace</li>
+                <li id="setup-materials"><span class="tick"></span>Upload at least one course material
+                  <button class="text-button" data-go="materials">Upload</button></li>
+                <li id="setup-lesson"><span class="tick"></span>Create your first lesson
+                  <button class="text-button" data-go="create">Start</button></li>
+              </ul>
+            </article>
+          </div>
+        </section>
+
+        <!-- Create a lesson -->
+        <section class="page hidden" data-page="create">
+          <div class="page-head">
+            <div>
+              <span class="overline">NEW LESSON</span>
+              <h2>Create a lesson</h2>
+              <p>Tell us about the class. Everything else is prepared for you.</p>
             </div>
+          </div>
 
-            <div id="recent-activity" class="activity-list">
-              <div class="activity-empty">
-                <span>◇</span>
-
-                <div>
-                  <strong>No faculty work generated yet</strong>
-                  <p>
-                    Your lecture packages and research syntheses will appear
-                    here.
-                  </p>
+          <div class="create-grid">
+            <form id="teaching-form" class="lesson-form">
+              <fieldset class="form-card">
+                <legend><b>1</b> What are you teaching?</legend>
+                <label class="field">Topic
+                  <input id="teach-topic" required minlength="3" maxlength="500" placeholder="e.g. Time value of money">
+                </label>
+                <div class="field-row">
+                  <label class="field"><span class="label-line">Course or programme <span class="optional">optional</span></span>
+                    <input id="teach-course" placeholder="e.g. MBA Finance">
+                  </label>
+                  <label class="field"><span class="label-line">Who is it for? <span class="optional">optional</span></span>
+                    <input id="teach-audience" placeholder="e.g. First-year MBA students">
+                  </label>
                 </div>
-              </div>
-            </div>
-          </article>
+              </fieldset>
 
-          <article class="insight-card readiness-card">
-            <div class="insight-heading">
-              <div>
-                <span class="overline">FACULTY SETUP</span>
-                <h3>Prepare your academic workspace</h3>
-              </div>
-
-              <span id="readiness-score" class="readiness-score">25%</span>
-            </div>
-
-            <div class="progress-track">
-              <span id="readiness-progress"></span>
-            </div>
-
-            <p id="readiness-copy">
-              Add course notes, papers, books, and cases so both assistants
-              reflect your academic context.
-            </p>
-
-            <ul class="readiness-list">
-              <li class="complete">
-                <span>✓</span>
-                Secure faculty account
-              </li>
-
-              <li id="readiness-documents">
-                <span>○</span>
-                Upload knowledge sources
-              </li>
-
-              <li>
-                <span>○</span>
-                Create your first faculty output
-              </li>
-            </ul>
-
-            <button class="readiness-action" data-scroll-target="library">
-              Add source material
-              <span>→</span>
-            </button>
-          </article>
-        </section>
-
-        <section id="agent-workbench" class="workbench hidden">
-          <div class="workbench-header">
-            <div>
-              <span id="workbench-kicker" class="overline">
-                TEACHING & CURRICULUM
-              </span>
-
-              <h3 id="workbench-title">AI Teaching Assistant</h3>
-
-              <p id="workbench-description">
-                Tell the agent what you’re teaching and it will assemble a
-                review-ready package.
-              </p>
-            </div>
-
-            <button
-              id="close-workbench"
-              class="icon-button"
-              aria-label="Close agent"
-            >
-              ×
-            </button>
-          </div>
-
-          <form id="teaching-form" class="agent-form">
-            <label class="full-field">
-              What topic are you teaching?
-              <input
-                id="teach-topic"
-                required
-                placeholder="e.g. Time value of money"
-              >
-            </label>
-
-            <label>
-              Course or programme
-              <input id="teach-course" placeholder="e.g. MBA Finance">
-            </label>
-
-            <label>
-              Audience
-              <input
-                id="teach-audience"
-                placeholder="e.g. First-year MBA students"
-              >
-            </label>
-
-            <label>
-              Session duration
-              <div class="input-suffix">
-                <input
-                  id="teach-duration"
-                  type="number"
-                  min="15"
-                  max="300"
-                  value="60"
-                >
-                <span>minutes</span>
-              </div>
-            </label>
-
-            <label>
-              Difficulty
-              <select id="teach-difficulty">
-                <option value="introductory">Introductory</option>
-                <option value="intermediate" selected>Intermediate</option>
-                <option value="advanced">Advanced</option>
-              </select>
-            </label>
-
-            <label class="full-field">
-              Additional requirements
-              <textarea
-                id="teach-instructions"
-                placeholder="Learning priorities, required examples, assessment style, exclusions, or institutional requirements"
-              ></textarea>
-            </label>
-
-            <label class="check full-field">
-              <input id="teach-web" type="checkbox" checked>
-
-              <span>
-                <strong>Use current web research</strong>
-                <small>
-                  Include recent industry news and credible public sources.
-                </small>
-              </span>
-            </label>
-
-            <label class="check full-field">
-              <input
-                id="teach-video"
-                type="checkbox"
-                aria-controls="video-duration-settings"
-                aria-expanded="false"
-              >
-
-              <span>
-                <strong>Generate multimedia explainer video</strong>
-                <small>
-                  Create a visual overview with narrated concept maps,
-                  comparisons, processes, worked examples, formulas,
-                  applications, and a recap. The video is grounded in the
-                  generated teaching package.
-                </small>
-              </span>
-            </label>
-
-            <fieldset
-              id="video-duration-settings"
-              class="video-duration-settings full-field hidden"
-              aria-hidden="true"
-            >
-              <legend>Video duration range</legend>
-
-              <p>
-                Choose any positive whole-minute range. The final duration
-                depends on the generated content and will stay within your
-                selected boundaries.
-              </p>
-
-              <div class="video-duration-grid">
-                <label>
-                  Minimum duration
-                  <div class="input-suffix">
-                    <input
-                      id="teach-video-min"
-                      type="number"
-                      min="1"
-                      step="1"
-                      value="4"
-                      required
-                    >
-                    <span>minutes</span>
+              <fieldset class="form-card">
+                <legend><b>2</b> Session details</legend>
+                <div class="field-row">
+                  <div class="field">Session length
+                    <div class="input-suffix">
+                      <input id="teach-duration" type="number" min="15" max="300" value="60" aria-label="Session length in minutes">
+                      <span>minutes</span>
+                    </div>
+                    <div class="quick-picks" role="group" aria-label="Common lengths">
+                      <button type="button" data-minutes="30">30</button>
+                      <button type="button" data-minutes="45">45</button>
+                      <button type="button" data-minutes="60" class="selected">60</button>
+                      <button type="button" data-minutes="90">90</button>
+                    </div>
                   </div>
-                </label>
-
-                <label>
-                  Maximum duration
-                  <div class="input-suffix">
-                    <input
-                      id="teach-video-max"
-                      type="number"
-                      min="1"
-                      step="1"
-                      value="15"
-                      required
-                    >
-                    <span>minutes</span>
+                  <div class="field">Level
+                    <div class="segmented" role="radiogroup" aria-label="Level">
+                      <label><input type="radio" name="difficulty" value="introductory"><span>Introductory</span></label>
+                      <label><input type="radio" name="difficulty" value="intermediate" checked><span>Intermediate</span></label>
+                      <label><input type="radio" name="difficulty" value="advanced"><span>Advanced</span></label>
+                    </div>
                   </div>
+                </div>
+                <label class="field"><span class="label-line">Anything else to include? <span class="optional">optional</span></span>
+                  <textarea id="teach-instructions" placeholder="Must-cover points, examples you like, assessment style, things to leave out"></textarea>
                 </label>
-              </div>
-            </fieldset>
+              </fieldset>
 
-            <button class="primary-button submit-agent full-field">
-              Generate teaching package
-              <span>→</span>
-            </button>
-          </form>
+              <fieldset class="form-card">
+                <legend><b>3</b> Extras</legend>
+                <label class="toggle">
+                  <input id="teach-web" type="checkbox" checked>
+                  <span class="switch" aria-hidden="true"></span>
+                  <span><strong>Use current web sources</strong><small>Add recent, credible public sources to your own materials.</small></span>
+                </label>
+                <label class="toggle">
+                  <input id="teach-video" type="checkbox" aria-controls="video-duration-settings" aria-expanded="false">
+                  <span class="switch" aria-hidden="true"></span>
+                  <span><strong>Make a narrated explainer video</strong><small>Diagrams build up step by step while the lesson is explained.</small></span>
+                </label>
+                <div id="video-duration-settings" class="video-range hidden" aria-hidden="true" role="group" aria-labelledby="video-range-title">
+                  <p class="range-title" id="video-range-title">Video length</p>
+                  <div class="field-row">
+                    <label class="field">Shortest
+                      <div class="input-suffix"><input id="teach-video-min" type="number" min="1" step="1" value="4" required><span>minutes</span></div>
+                    </label>
+                    <label class="field">Longest
+                      <div class="input-suffix"><input id="teach-video-max" type="number" min="1" step="1" value="15" required><span>minutes</span></div>
+                    </label>
+                  </div>
+                </div>
+              </fieldset>
+            </form>
 
-          <form id="research-form" class="agent-form hidden">
-            <label class="full-field">
-              What are you researching?
-              <textarea
-                id="research-topic"
-                required
-                placeholder="Describe your research topic, question, or problem statement"
-              ></textarea>
-            </label>
-
-            <label class="full-field">
-              Discipline
-              <input
-                id="discipline"
-                placeholder="e.g. Management, Finance, Computer Science"
-              >
-            </label>
-
-            <label class="full-field">
-              Additional requirements
-              <textarea
-                id="research-instructions"
-                placeholder="Population, geography, date range, methods, theories, exclusions, or required comparisons"
-              ></textarea>
-            </label>
-
-            <label class="check full-field">
-              <input id="research-web" type="checkbox" checked>
-
-              <span>
-                <strong>Use current web research</strong>
-                <small>
-                  Supplement uploaded papers with recent credible sources.
-                </small>
-              </span>
-            </label>
-
-            <button class="primary-button submit-agent full-field">
-              Generate research synthesis
-              <span>→</span>
-            </button>
-          </form>
-        </section>
-
-        <section id="library" class="library-panel">
-          <div class="library-copy">
-            <div class="library-icon">▤</div>
-
-            <div>
-              <span class="overline">YOUR KNOWLEDGE BASE</span>
-              <h3>Knowledge library</h3>
-              <p>
-                Ground both agents in papers, books, notes, and case studies you
-                trust.
-              </p>
-            </div>
-          </div>
-
-          <form id="upload-form" class="upload-form">
-            <select id="collection" aria-label="Document collection">
-              <option value="research_papers">Research papers</option>
-              <option value="previous_notes">Previous notes</option>
-              <option value="books">Books</option>
-              <option value="case_studies">Case studies</option>
-            </select>
-
-            <label class="file-button">
-              <input
-                id="file"
-                type="file"
-                accept=".pdf,.docx,.txt,.md,.csv"
-                required
-              >
-              <span>Choose document</span>
-            </label>
-
-            <button class="secondary-button">Upload</button>
-          </form>
-
-          <div id="documents" class="document-list">
-            <span class="empty-library">No documents uploaded yet.</span>
+            <aside class="summary-card" aria-label="What you will get">
+              <h3>What you will get</h3>
+              <ul class="outputs">
+                <li><span class="out-icon guide">▤</span><div><strong>Teacher's guide</strong><small>Word and PDF. Timings, answer keys, model answers and notes.</small></div></li>
+                <li><span class="out-icon slides">◫</span><div><strong>Student slides</strong><small>PowerPoint with diagrams, examples and quick checks.</small></div></li>
+                <li id="video-output" class="muted-out"><span class="out-icon video">▷</span><div><strong>Explainer video</strong><small id="video-output-note">Optional. Turn it on in step 3.</small></div></li>
+              </ul>
+              <div class="materials-note" id="materials-note"></div>
+              <button class="primary-button" type="submit" form="teaching-form" id="submit-lesson">
+                <span>Create lesson</span><span aria-hidden="true">→</span>
+              </button>
+              <p class="fine-print">Most lessons are ready in a few minutes. Videos take longer.</p>
+            </aside>
           </div>
         </section>
 
-        <section id="output" class="output-panel hidden">
-          <div class="output-heading">
+        <!-- Review a research paper -->
+        <section class="page hidden" data-page="review">
+          <div class="page-head">
             <div>
-              <span class="overline">AGENT OUTPUT</span>
-              <h3 id="output-title">Preparing your academic material</h3>
+              <span class="overline">RESEARCH ASSISTANT</span>
+              <h2>Review a paper</h2>
+              <p>Upload a manuscript. You get a reviewer's report and an improved version of the paper.</p>
             </div>
-
-            <div class="loader hidden" id="loader"></div>
           </div>
 
-          <div id="downloads" class="downloads"></div>
-          <pre id="result"></pre>
+          <div class="create-grid">
+            <form id="review-form" class="lesson-form">
+              <fieldset class="form-card">
+                <legend><b>1</b> The manuscript</legend>
+                <div class="segmented source-switch" role="radiogroup" aria-label="Manuscript source">
+                  <label><input type="radio" name="manuscript-source" value="upload" checked><span>Upload a file</span></label>
+                  <label><input type="radio" name="manuscript-source" value="existing"><span>Use an uploaded file</span></label>
+                </div>
+                <label class="drop-zone compact" id="manuscript-drop">
+                  <input id="manuscript-file" type="file" accept=".pdf,.docx,.txt,.md">
+                  <span class="drop-icon">⇪</span>
+                  <strong id="manuscript-label">Choose the paper or drag it here</strong>
+                  <small>PDF or Word works best · up to 50 MB</small>
+                </label>
+                <label class="field hidden" id="manuscript-existing-field">Manuscript
+                  <select id="manuscript-existing"></select>
+                </label>
+              </fieldset>
+
+              <fieldset class="form-card">
+                <legend><b>2</b> About the paper</legend>
+                <div class="field-row">
+                  <label class="field"><span class="label-line">Field or discipline <span class="optional">optional</span></span>
+                    <input id="review-discipline" maxlength="200" placeholder="e.g. Educational psychology">
+                  </label>
+                  <label class="field">Type of paper
+                    <select id="review-type">
+                      <option value="auto">Detect automatically</option>
+                      <option value="empirical">Empirical study</option>
+                      <option value="review">Literature or systematic review</option>
+                      <option value="theoretical">Theoretical or conceptual</option>
+                      <option value="methods">Methods or tools paper</option>
+                      <option value="case_study">Case study</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="field-row">
+                  <label class="field"><span class="label-line">Target journal or conference <span class="optional">optional</span></span>
+                    <input id="review-venue" maxlength="300" placeholder="e.g. Computers &amp; Education">
+                  </label>
+                  <label class="field"><span class="label-line">Author name for the files <span class="optional">optional</span></span>
+                    <input id="review-author" maxlength="200" placeholder="e.g. Dr A. Sen">
+                  </label>
+                </div>
+                <label class="field"><span class="label-line">What should the review focus on? <span class="optional">optional</span></span>
+                  <textarea id="review-instructions" maxlength="4000" placeholder="e.g. Is the methodology strong enough for a Q1 journal? Is the discussion too long?"></textarea>
+                </label>
+              </fieldset>
+
+              <fieldset class="form-card">
+                <legend><b>3</b> Options</legend>
+                <label class="toggle">
+                  <input id="review-revision" type="checkbox" checked>
+                  <span class="switch" aria-hidden="true"></span>
+                  <span><strong>Prepare a revised version</strong><small>A clean copy and a Word copy with tracked changes. Data, numbers and citations are kept exactly.</small></span>
+                </label>
+                <label class="toggle">
+                  <input id="review-related" type="checkbox" checked>
+                  <span class="switch" aria-hidden="true"></span>
+                  <span><strong>Compare with my research papers</strong><small>Positions the paper against papers you uploaded as research papers.</small></span>
+                </label>
+                <label class="toggle">
+                  <input id="review-web" type="checkbox">
+                  <span class="switch" aria-hidden="true"></span>
+                  <span><strong>Check recent literature online</strong><small>Looks for recent published work the paper may be missing.</small></span>
+                </label>
+              </fieldset>
+            </form>
+
+            <aside class="summary-card" aria-label="What you will get">
+              <h3>What you will get</h3>
+              <ul class="outputs">
+                <li><span class="out-icon guide">▤</span><div><strong>Review report</strong><small>Word and PDF. Recommendation, scores, strengths, major and minor issues, gaps and a revision plan.</small></div></li>
+                <li id="revision-output"><span class="out-icon slides">✎</span><div><strong>Revised paper</strong><small>Word and PDF, plus a Word copy with tracked changes you can accept or reject.</small></div></li>
+              </ul>
+              <div class="materials-note" id="review-note"></div>
+              <button class="primary-button" type="submit" form="review-form" id="submit-review">
+                <span>Review paper</span><span aria-hidden="true">→</span>
+              </button>
+              <p class="fine-print">Most reviews take a few minutes. Long papers take longer.</p>
+            </aside>
+          </div>
+        </section>
+
+        <!-- One lesson or review: progress, downloads, preview -->
+        <section class="page hidden" data-page="lesson">
+          <button class="back-link" data-go="lessons">← My lessons</button>
+          <div class="lesson-head">
+            <div>
+              <span class="overline" id="lesson-kicker">LESSON</span>
+              <h2 id="lesson-title">Preparing your lesson</h2>
+              <p id="lesson-meta" class="lesson-meta"></p>
+            </div>
+            <div class="loader hidden" id="loader" aria-label="Working"></div>
+          </div>
+
+          <ol id="lesson-steps" class="stepper">
+            <li data-step="write"><span></span><em>Writing the lesson</em></li>
+            <li data-step="files"><span></span><em>Building the files</em></li>
+            <li data-step="video" class="hidden"><span></span>Recording the video</li>
+            <li data-step="done"><span></span>Ready</li>
+          </ol>
+
+          <p id="lesson-message" class="notice hidden" role="status"></p>
+
+          <div id="downloads" class="download-groups hidden">
+            <section>
+              <h3 id="downloads-teacher-title">For you</h3>
+              <div id="downloads-teacher" class="download-list"></div>
+            </section>
+            <section>
+              <h3 id="downloads-students-title">For your students</h3>
+              <div id="downloads-students" class="download-list"></div>
+            </section>
+          </div>
+
+          <div id="lesson-preview" class="preview hidden"></div>
+
+          <details class="raw-data hidden" id="raw-data">
+            <summary id="raw-data-title">Advanced: lesson data (JSON)</summary>
+            <div id="downloads-raw" class="download-list"></div>
+            <pre id="result"></pre>
+          </details>
+        </section>
+
+        <!-- All lessons -->
+        <section class="page hidden" data-page="lessons">
+          <div class="page-head">
+            <div>
+              <span class="overline">LIBRARY</span>
+              <h2>My lessons</h2>
+              <p>Open any lesson to download its files again.</p>
+            </div>
+            <button class="secondary-button" data-go="create">+ New lesson</button>
+          </div>
+          <div class="panel"><div id="lesson-list" class="lesson-rows"></div></div>
+        </section>
+
+        <!-- All paper reviews -->
+        <section class="page hidden" data-page="reviews">
+          <div class="page-head">
+            <div>
+              <span class="overline">RESEARCH</span>
+              <h2>Paper reviews</h2>
+              <p>Open any review to download the report and the revised paper again.</p>
+            </div>
+            <button class="secondary-button" data-go="review">+ Review a paper</button>
+          </div>
+          <div class="panel"><div id="review-list" class="lesson-rows"></div></div>
+        </section>
+
+        <!-- Course materials -->
+        <section class="page hidden" data-page="materials">
+          <div class="page-head">
+            <div>
+              <span class="overline">KNOWLEDGE BASE</span>
+              <h2>Uploaded files</h2>
+              <p>Lessons draw on your course materials first. Paper reviews compare manuscripts with your research papers.</p>
+            </div>
+          </div>
+
+          <form id="upload-form" class="upload-card">
+            <label class="drop-zone" id="drop-zone">
+              <input id="file" type="file" accept=".pdf,.docx,.txt,.md,.csv" required>
+              <span class="drop-icon">⇪</span>
+              <strong id="file-label">Choose a file or drag it here</strong>
+              <small>PDF, Word, text, Markdown or CSV · up to 50 MB</small>
+            </label>
+            <div class="upload-side">
+              <label class="field">What kind of material is it?
+                <select id="collection">
+                  <option value="previous_notes">Lecture notes</option>
+                  <option value="books">Textbook or book chapter</option>
+                  <option value="case_studies">Case study</option>
+                  <option value="research_papers">Research paper (for comparisons in reviews)</option>
+                  <option value="manuscripts">Manuscript to review</option>
+                </select>
+              </label>
+              <button class="primary-button" type="submit"><span>Upload</span><span aria-hidden="true">↑</span></button>
+              <p id="upload-message" class="upload-message" role="status"></p>
+            </div>
+          </form>
+
+          <div class="panel">
+            <div class="panel-head"><h3>Your files</h3><span id="materials-count" class="score"></span></div>
+            <div id="documents" class="doc-rows"></div>
+          </div>
         </section>
       </main>
     </div>
   </section>
 
-  <script src="/static/app.js?v=20261012-user-video-duration"></script>
+  <script src="/static/app.js?v=20261101-research"></script>
 </body>
 </html>

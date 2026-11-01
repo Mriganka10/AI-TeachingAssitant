@@ -11,10 +11,14 @@ from app.core.config import settings
 
 
 def test_strict_contracts_require_every_declared_property() -> None:
-    for agent_type in ("teaching", "research"):
-        schema = output_schema(agent_type)
-        assert schema["additionalProperties"] is False
-        assert set(schema["required"]) == set(schema["properties"])
+    schema = output_schema("teaching")
+    assert schema["additionalProperties"] is False
+    assert set(schema["required"]) == set(schema["properties"])
+    research = output_schema("research")
+    assert research["additionalProperties"] is False
+    assert set(research["required"]) == set(research["properties"])
+    with pytest.raises(ValueError):
+        output_schema("unknown")
 
 
 def test_mock_teaching_package_passes_semantic_quality_checks() -> None:
@@ -58,17 +62,6 @@ def test_teaching_quality_rejects_an_unrelated_but_well_formed_package() -> None
 
     issues = validate_output("teaching", unrelated, request)
     assert any("requested topic" in issue for issue in issues)
-    assert any("substantive sections" in issue for issue in issues)
-
-
-def test_research_quality_rejects_topic_drift_in_the_evidence_body() -> None:
-    request = {"research_topic": "Responsible AI in Higher Education"}
-    relevant = LLMService._mock(request)
-    assert validate_output("research", relevant, request) == []
-
-    unrelated = deepcopy(relevant)
-    unrelated["executive_summary"]["evidence"] = "Beaches change over time."
-    issues = validate_output("research", unrelated, request)
     assert any("substantive sections" in issue for issue in issues)
 
 

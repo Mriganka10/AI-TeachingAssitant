@@ -39,8 +39,17 @@ class TeachingRequest(BaseModel):
 
 
 class ResearchRequest(BaseModel):
-    research_topic: str = Field(min_length=3, max_length=1000)
-    discipline: str = "General"
-    use_web_search: bool = True
+    """Review one uploaded manuscript and, optionally, return a revised version of it."""
+
+    manuscript_document_id: str = Field(min_length=1, max_length=64)
+    discipline: str = Field(default="", max_length=200)
+    paper_type: Literal[
+        "auto", "empirical", "review", "theoretical", "methods", "case_study", "other"
+    ] = "auto"
+    target_venue: str = Field(default="", max_length=300)
+    author_name: str = Field(default="", max_length=200)
+    generate_revision: bool = True
+    use_web_search: bool = False
+    # Other uploaded papers used to position the manuscript in its literature.
     collections: list[str] = Field(default_factory=lambda: ["research_papers"])
-    instructions: str = ""
+    instructions: str = Field(default="", max_length=4000)

@@ -42,7 +42,7 @@ The application connects only with its own database role. RDS has seven-day auto
 3. Register new worker and web task-definition revisions.
 4. Apply backward-compatible migrations once.
 5. Update worker, then web; wait for ECS stability.
-6. Verify `/health`, OTP login, upload, both agents, polling, and downloads.
+6. Verify `/health`, OTP login, upload, lesson creation, polling, and downloads.
 7. Watch ALB 5xx, task restarts, queue age/DLQ, RDS, and logs.
 
 Rollback uses preceding task definitions and, only if schema compatibility requires it, the database restore plan. The former Elastic Beanstalk environment is paused—not active—and should remain only for the agreed 7–14 day rollback window.
