@@ -345,7 +345,7 @@
                 <label class="toggle">
                   <input id="review-revision" type="checkbox" checked>
                   <span class="switch" aria-hidden="true"></span>
-                  <span><strong>Prepare a revised version</strong><small>A clean copy and a Word copy with tracked changes. Data, numbers and citations are kept exactly.</small></span>
+                  <span><strong>Prepare a revised version</strong><small>A deeper rewrite with new sections and tables where the review asks for them, as a clean copy and a Word copy with tracked changes. Your data, numbers and citations are kept exactly.</small></span>
                 </label>
                 <label class="toggle">
                   <input id="review-related" type="checkbox" checked>
@@ -353,9 +353,9 @@
                   <span><strong>Compare with my research papers</strong><small>Positions the paper against papers you uploaded as research papers.</small></span>
                 </label>
                 <label class="toggle">
-                  <input id="review-web" type="checkbox">
+                  <input id="review-web" type="checkbox" checked>
                   <span class="switch" aria-hidden="true"></span>
-                  <span><strong>Check recent literature online</strong><small>Looks for recent published work the paper may be missing.</small></span>
+                  <span><strong>Add recent literature</strong><small>Finds recent published work the paper is missing. Only references confirmed in Crossref or arXiv are cited.</small></span>
                 </label>
               </fieldset>
             </form>
@@ -364,7 +364,7 @@
               <h3>What you will get</h3>
               <ul class="outputs">
                 <li><span class="out-icon guide">▤</span><div><strong>Review report</strong><small>Word and PDF. Recommendation, scores, strengths, major and minor issues, gaps and a revision plan.</small></div></li>
-                <li id="revision-output"><span class="out-icon slides">✎</span><div><strong>Revised paper</strong><small>Word and PDF, plus a Word copy with tracked changes you can accept or reject.</small></div></li>
+                <li id="revision-output"><span class="out-icon slides">✎</span><div><strong>Revised paper</strong><small>Journal-style Word and PDF with numbered sections, tables and verified references, plus a tracked-changes copy.</small></div></li>
               </ul>
               <div class="materials-note" id="review-note"></div>
               <button class="primary-button" type="submit" form="review-form" id="submit-review">
@@ -483,6 +483,6 @@
     </div>
   </section>
 
-  <script src="/static/app.js?v=20261101-research"></script>
+  <script src="/static/app.js?v=20261101-research2"></script>
 </body>
 </html>
