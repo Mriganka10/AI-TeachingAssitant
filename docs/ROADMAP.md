@@ -1,0 +1,96 @@
+# Roadmap
+
+## Phase 1: Current Prototype
+
+Status: implemented.
+
+- Professional professor login and dashboard
+- Email OTP and session authentication
+- AI Teaching Assistant
+- Research Paper Assistant: manuscript review report, revised paper and tracked-changes copy
+- Student slide template with diagrams, icons and animations; animated narrated video
+- Plain-language writing checks and neutral document metadata
+- UI: lesson builder, paper review form, lesson and review history, uploaded-files library
+- Uploaded academic-source library
+- Optional OpenAI web search
+- JSON, DOCX, PDF, and PPTX artifacts
+- SQLite/PostgreSQL persistence
+- local/S3 storage
+- audit tables
+- Docker and ECS web/worker deployment
+- durable SQS agent jobs with status polling, retries, and DLQ
+- first-time SES email verification followed by OTP login
+- 50 MB upload limit through app and Nginx
+- OCR configuration hooks for scanned PDFs
+- tests and linting
+
+## Phase 2: Retrieval Quality
+
+- semantic chunking
+- embeddings and vector search
+- hybrid lexical/vector retrieval
+- source reranking
+- page-level citations
+- DOI and URL validation
+- scanned-document OCR
+
+## Phase 3: Academic Quality Controls
+
+- structured-output schema enforcement
+- citation verifier
+- Bloom taxonomy validation
+- assessment difficulty and duplication checks
+- accessibility checks
+- discipline-specific templates
+- prompt/model version tracking
+- faculty feedback and regeneration controls
+
+## Phase 4: Durable Background Processing
+
+Status: core production path implemented in September 2026.
+
+- SQS job queue and worker service (implemented)
+- retries, completed-job idempotency, and DLQ (implemented)
+- progress and cancellation (planned)
+- notification when work completes
+- large-batch paper ingestion
+
+## Phase 5: Institutional Product
+
+- departments, courses, and teaching teams
+- Cognito or institutional SSO
+- professor, reviewer, and administrator roles
+- source-sharing permissions
+- curated institutional knowledge bases
+- retention and deletion workflows
+- usage and cost dashboards
+
+## Phase 6: Collaboration
+
+- lecture-package versioning
+- professor comments and approval
+- co-teaching workspace for shared lessons
+- export templates with university branding
+- assignment and rubric library
+- LMS integration
+
+## Phase 7: Production Hardening
+
+- Alembic migrations
+- CSRF and rate limiting
+- malware scanning
+- WAF and abuse controls
+- CloudWatch dashboards and alarms
+- disaster-recovery exercise
+- penetration test
+- privacy and academic-integrity review
+
+## Immediate Next Sprint
+
+1. Add vector-backed, chunk-level retrieval.
+2. Enforce output schemas at model-call level.
+3. Add citation verification and visible provenance.
+4. Add worker autoscaling alarms, progress reporting, and cancellation.
+5. Add Alembic migrations.
+6. Add OTP rate limiting and CSRF protection.
+7. Add professor-controlled deletion and retention.
