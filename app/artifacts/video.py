@@ -474,6 +474,7 @@ def generate_teaching_video_plan(
             maximum_words=maximum_words,
         )
         plan = _constrain_plan_narration(plan, maximum_words=maximum_words)
+        plan = scrub_teacher_terms(plan, audience_package)
         last_issues = _video_plan_issues(
             plan,
             minimum_words=minimum_words,
@@ -579,6 +580,7 @@ def _review_video_plan(
             maximum_words=maximum_words,
         )
         reviewed = _constrain_plan_narration(reviewed, maximum_words=maximum_words)
+        reviewed = scrub_teacher_terms(reviewed, teaching_package)
     except Exception:  # noqa: BLE001 - the draft is already valid; keep it
         return plan
     issues = _video_plan_issues(
@@ -727,7 +729,9 @@ Do not narrate teacher instructions, facilitation notes, internal quality checks
 or references to a professor handbook. Do not show or speak lesson-planning metadata such as
 session or section timings, the audience label, Bloom's taxonomy levels, learning-objective IDs,
 or raw source IDs; use overview.audience only to pitch tone and depth. Keep the academic substance
-and source qualifications.
+and source qualifications. Never use these words anywhere in the script: "teaching tip",
+"facilitation", "professor note", "Bloom's", "learning objective ID", "LO1", "expected answer" or
+"answer key"; when you pose a question, simply give the answer.
 
 Use only information supported by the supplied teaching package. Do not introduce new statistics,
 citations, formulas, claims, or examples that are not supported by it. You may reorganize and
@@ -848,14 +852,106 @@ def _video_plan_issues(
         issues.append(
             f"Narration has {narration_words} words; it must not exceed {maximum_words} words."
         )
-    if _teacher_only_terms(scenes, teaching_package):
+    leaked = _teacher_only_terms(scenes, teaching_package)
+    if leaked:
+        found = ", ".join(f'"{term}"' for term in dict.fromkeys(leaked))
         issues.append(
             "The storyboard contains teacher-only material (facilitation tips, Bloom levels, "
-            "objective IDs, or professor notes). Rewrite it for students and a broader audience."
+            f"objective IDs, or professor notes): {found}. Rewrite those parts for students "
+            "and a broader audience without these words."
         )
     if teaching_package is not None:
         issues.extend(storyboard_relevance_issues(plan, teaching_package))
     return issues
+
+
+# Teacher-facing wording that has a natural student-facing equivalent.
+_TEACHER_REPLACEMENTS: tuple[tuple[re.Pattern[str], str], ...] = tuple(
+    (re.compile(pattern, re.IGNORECASE), replacement)
+    for pattern, replacement in (
+        (r"\s*\(\s*LO\d+\s*\)", ""),
+        (r"\bLO\d+\s*[:.\-\u2013]\s*", ""),
+        (r"\bLO\d+\b", ""),
+        (r"\bexpected\s+answer(s?)\b", r"answer\1"),
+        (r"\banswer\s+key(s?)\b", "answers"),
+        (r"\bteaching\s+tip(s?)\s*:\s*", ""),
+        (r"\bteaching\s+tip(s?)\b", r"tip\1"),
+    )
+)
+# Wording that only makes sense to a teacher: the whole sentence or list item is removed.
+_TEACHER_SENTENCE = re.compile(
+    r"bloom'?s?\s+(?:taxonomy|level)|facilitation\s+note|professor\s+(?:note|guidance|review)|"
+    r"teaching\s+tip",
+    re.IGNORECASE,
+)
+
+
+def _scrub_text(text: str, allowed: str, *, drop_sentences: bool) -> str:
+    if not text:
+        return text
+    found = [match.group(0) for pattern in (_TEACHER_SENTENCE, *(p for p, _ in _TEACHER_REPLACEMENTS))
+             for match in pattern.finditer(text)]
+    if not any(term.casefold().strip() not in allowed for term in found):
+        return text  # nothing to change: clean text is left exactly as written
+    if drop_sentences:
+        sentences = re.split(r"(?<=[.!?])\s+", text)
+        sentences = [
+            sentence for sentence in sentences
+            if not any(match.group(0).casefold() not in allowed
+                       for match in _TEACHER_SENTENCE.finditer(sentence))
+        ]
+        text = " ".join(sentences)
+    for pattern, replacement in _TEACHER_REPLACEMENTS:
+        text = pattern.sub(
+            lambda match, replacement=replacement: match.group(0)
+            if match.group(0).casefold() in allowed else match.expand(replacement),
+            text,
+        )
+    text = re.sub(r"\s{2,}", " ", text)
+    text = re.sub(r"\s+([,.;:!?])", r"\1", text).strip()
+    return text[:1].upper() + text[1:] if text else text
+
+
+def scrub_teacher_terms(plan: Any, teaching_package: dict | None) -> Any:
+    """Rewrite or remove teacher-only wording so one stray phrase does not cost the video.
+
+    Phrases that occur in the learner material itself (for example in a lesson about Bloom's
+    taxonomy) are part of the subject and are left alone.
+    """
+    if not isinstance(plan, dict) or not isinstance(plan.get("scenes"), list):
+        return plan
+    allowed = _text(teaching_package).casefold() if teaching_package else ""
+    scenes = []
+    for scene in plan["scenes"]:
+        if not isinstance(scene, dict):
+            scenes.append(scene)
+            continue
+        scene = dict(scene)
+        for key in ("section", "title", "takeaway"):
+            if isinstance(scene.get(key), str):
+                scene[key] = _scrub_text(scene[key], allowed, drop_sentences=False) or scene[key]
+        if isinstance(scene.get("narration"), str):
+            scene["narration"] = _scrub_text(scene["narration"], allowed, drop_sentences=True) \
+                or scene["narration"]
+        for key in ("bullets", "visual_elements"):
+            items = scene.get(key)
+            if not isinstance(items, list):
+                continue
+            kept = [
+                _scrub_text(str(item), allowed, drop_sentences=False)
+                for item in items
+                if not any(match.group(0).casefold() not in allowed
+                           for match in _TEACHER_SENTENCE.finditer(str(item)))
+            ]
+            scene[key] = [item for item in kept if item]
+        # Storyboard rules need at least two entries per list: top a short list up from the other.
+        for key, other in (("bullets", "visual_elements"), ("visual_elements", "bullets")):
+            items = scene.get(key)
+            if isinstance(items, list) and len(items) < 2:
+                spare = [item for item in scene.get(other) or [] if item not in items]
+                scene[key] = items + spare[: 2 - len(items)]
+        scenes.append(scene)
+    return {**plan, "scenes": scenes}
 
 
 def _teacher_only_terms(scenes: list, teaching_package: dict | None) -> list[str]:

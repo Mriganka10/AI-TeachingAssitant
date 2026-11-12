@@ -23,6 +23,7 @@ from app.artifacts.video import (
     _render_segment,
     _resolve_video_duration_range,
     _run_ffmpeg,
+    _teacher_only_terms,
     _trim_narration_silence,
     _verify_scene_progression,
     _video_plan_issues,
@@ -32,6 +33,7 @@ from app.artifacts.video import (
     generate_teaching_video_plan,
     render_scene_stages,
     reveal_count,
+    scrub_teacher_terms,
     stage_schedule,
 )
 from app.core.config import settings
@@ -670,3 +672,98 @@ def test_animated_segment_keeps_exact_duration(tmp_path: Path) -> None:
     _render_segment(ffmpeg, stages[-1], audio, output, 5.0, scene_index=2, stages=stages,
                     previous_frame=previous, is_last=True, visual_type="process")
     assert abs(_media_duration(ffmpeg, output) - 5.0) < 0.15
+
+
+def test_teacher_wording_is_scrubbed_instead_of_failing_the_video() -> None:
+    package = _audience_video_package(LLMService._mock({"topic": "Cell Structure", "duration_minutes": 60}))
+    plan = {"scenes": [{
+        "section": "Check (LO2)",
+        "title": "Quick check",
+        "takeaway": "The expected answer is the nucleus.",
+        "bullets": ["Teaching tip: pause here", "Answer key: nucleus", "Bloom's level Apply"],
+        "visual_elements": ["LO1", "Nucleus", "Cell"],
+        "narration": (
+            "Teaching tip: ask the class first. Which organelle stores DNA? The expected answer "
+            "is the nucleus. This maps to Bloom's level Apply. Now look at the membrane."
+        ),
+    }]}
+    scene = scrub_teacher_terms(plan, package)["scenes"][0]
+    assert scene["narration"] == (
+        "Which organelle stores DNA? The answer is the nucleus. Now look at the membrane."
+    )
+    assert scene["section"] == "Check" and scene["takeaway"] == "The answer is the nucleus."
+    assert len(scene["bullets"]) >= 2 and len(scene["visual_elements"]) >= 2
+    assert _teacher_only_terms([scene], package) == []
+
+    # A lesson about Bloom's taxonomy keeps it: it is the subject, not teacher metadata.
+    about_bloom = {**package, "title": "Bloom's taxonomy in course design"}
+    kept = scrub_teacher_terms(
+        {"scenes": [{"narration": "Bloom's taxonomy orders thinking skills.", "bullets": ["Bloom's taxonomy", "Levels"]}]},
+        about_bloom,
+    )["scenes"][0]
+    assert kept["narration"] == "Bloom's taxonomy orders thinking skills."
+
+
+def test_script_with_teacher_phrases_still_produces_a_video_plan(monkeypatch) -> None:
+    narration = " ".join(
+        ["Supervised learning uses labels; unsupervised learning finds patterns without labels."] * 10
+    )
+    leaked = "Teaching tip: ask the class to guess first. The expected answer is supervised learning. "
+    plan = {
+        "title": "Supervised and Unsupervised Learning",
+        "target_duration_seconds": 270,
+        "scenes": [
+            {
+                "section": "CORE CONCEPT",
+                "title": f"Concept {index}",
+                "visual_type": "title" if index == 1 else "recap" if index == 8 else "concept_map",
+                "visual_elements": ["Definition", "Mechanism", "Application"],
+                "bullets": ["Definition", "Answer key: labels"],
+                "takeaway": "The distinction determines how the model learns.",
+                "narration": (leaked if index == 4 else "") + narration,
+            }
+            for index in range(1, 9)
+        ],
+    }
+    calls = []
+
+    class FakeResponses:
+        def create(self, **kwargs):
+            calls.append(kwargs)
+            return type("R", (), {"output_text": __import__("json").dumps(plan)})()
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.responses = FakeResponses()
+
+    monkeypatch.setattr("openai.OpenAI", FakeClient)
+    monkeypatch.setattr(settings, "openai_api_key", "test-key")
+    monkeypatch.setattr(settings, "video_script_review_enabled", False)
+    scenes = generate_teaching_video_plan(
+        {
+            "title": "Supervised and Unsupervised Learning",
+            "overview": {"lesson_purpose": "Compare the two learning paradigms."},
+            "lecture_sections": [
+                {"title": "Supervised learning", "content": {"explanation": "Models learn from labelled examples.",
+                                                             "key_points": ["Labels guide learning"]}},
+                {"title": "Unsupervised learning", "content": {"explanation": "Models find structure.",
+                                                               "key_points": ["Clustering"]}},
+            ],
+        },
+        min_minutes=4,
+        max_minutes=15,
+    )
+    text = " ".join(scene.narration + " ".join(scene.bullets) for scene in scenes)
+    assert len(calls) == 1  # accepted first time, no failed retry
+    assert "Teaching tip" not in text and "expected answer" not in text and "Answer key" not in text
+    assert "The answer is supervised learning." in text
+
+
+def test_leak_message_names_the_phrases_found() -> None:
+    package = _audience_video_package(LLMService._mock({"topic": "Cell Structure", "duration_minutes": 60}))
+    issues = _video_plan_issues(
+        {"scenes": [{"visual_type": "title", "narration": "word " * 30 + "Bloom's level Apply.",
+                     "bullets": ["a", "b"], "visual_elements": ["a", "b"], "takeaway": "t"}] * 3},
+        minimum_words=10, maximum_words=1000, teaching_package=package,
+    )
+    assert any('"Bloom\'s level"' in issue for issue in issues)
